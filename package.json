@@ -11,7 +11,7 @@
     "test": "npm run test:utc && npm run test:tokyo",
     "test:utc": "TZ=UTC vitest run",
     "test:tokyo": "TZ=Asia/Tokyo vitest run",
-    "build": "PATH=$PWD/node_modules/.bin:$PATH sam build",
+    "build": "PATH=$PWD/node_modules/.bin:$PATH sam build && node scripts/check-bundle.mjs",
     "smoke:vault": "esbuild scripts/smoke-vault.ts --bundle --platform=node --format=esm --target=es2022 --outfile=.smoke/smoke-vault.mjs --log-level=warning --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node .smoke/smoke-vault.mjs",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "telegram": "esbuild scripts/telegram-admin.ts --bundle --platform=node --format=esm --target=es2022 --outfile=.smoke/telegram-admin.mjs --log-level=warning --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node .smoke/telegram-admin.mjs"

@@ -109,6 +109,7 @@ Retenção de 30 dias (`HermesLogGroup`). Linhas úteis: `[vault] ...`, `[telegr
 
 | Sintoma | Causa provável |
 |---|---|
+| Log `Dynamic require of "process" is not supported` e `500` em tudo | Bundle ESM sem o `Banner` do `createRequire` no `template.yaml`. O `npm run build` agora roda `scripts/check-bundle.mjs`, que importa o bundle como arquivo `.mjs` (com `node -e` o erro some, porque o `require` global mascara o problema). |
 | `Last error: Wrong response ... 401` | `webhook-secret` no SSM difere do usado no `setWebhook`. Rode o `set-webhook.sh` de novo (a Lambda pode ter o valor antigo em cache: um novo deploy ou esperar o cold start renova). |
 | `... 500` e log `Falha ao ler o parâmetro SSM <nome>: ParameterNotFound` | Parâmetro ausente ou com nome diferente do `SsmPrefix`/`VaultTokenParam`. |
 | `... AccessDeniedException` | A IAM da Lambda só lê os 4 parâmetros do template. Confira o nome exato. |

@@ -41,6 +41,10 @@ Resources:
         Format: esm
         Target: es2022
         Sourcemap: false
+        # Bundle ESM com dependências CommonJS (SDK da AWS, yaml): sem isto a Lambda falha no
+        # init com 'Dynamic require of "process" is not supported'.
+        Banner:
+          - js=import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);
         EntryPoints: [src/handler.ts]
         OutExtension: [.js=.mjs]
     Properties:

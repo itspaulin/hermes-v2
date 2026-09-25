@@ -1,17 +1,26 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda";
-import { nowIso, systemClock, TIMEZONE, type Clock } from "./time/index.js";
+import { createTelegramClient } from "./telegram/client.js";
+import { loadTelegramConfig } from "./telegram/config.js";
+import { handleWebhook, type WebhookDeps } from "./telegram/webhook.js";
+import { systemClock } from "./time/index.js";
 
-/**
- * Handler mínimo da fundação. Ainda não processa Telegram nem jobs agendados.
- * Devolve 200 com o horário atual, para validar deploy e camada de tempo.
- * O Clock entra por fábrica (o 2º argumento do Lambda é o context, não um clock).
- */
-export function createHandler(clock: Clock) {
-  return async (_event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => ({
-    statusCode: 200,
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ ok: true, timezone: TIMEZONE, now: nowIso(clock) }),
-  });
+/** Handler do API Gateway (webhook do Telegram). Dependências entram por fábrica: o 2º argumento do Lambda é o context. */
+export function createHandler(deps: WebhookDeps) {
+  return (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> =>
+    handleWebhook(event, deps);
 }
 
-export const handler = createHandler(systemClock);
+let cached: ReturnType<typeof createHandler> | undefined;
+
+/** Export de produção: monta as dependências na primeira invocação (não no import). */
+export const handler = (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
+  if (!cached) {
+    const config = loadTelegramConfig(process.env);
+    cached = createHandler({
+      config,
+      client: createTelegramClient(config.botToken),
+      clock: systemClock,
+    });
+  }
+  return cached(event);
+};

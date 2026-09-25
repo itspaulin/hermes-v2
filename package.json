@@ -11,7 +11,7 @@
     "test": "npm run test:utc && npm run test:tokyo",
     "test:utc": "TZ=UTC vitest run",
     "test:tokyo": "TZ=Asia/Tokyo vitest run",
-    "build": "sam build"
+    "build": "PATH=$PWD/node_modules/.bin:$PATH sam build"
   },
   "dependencies": {
     "luxon": "^3.7.2"

@@ -7,6 +7,8 @@ export interface TelegramUpdate {
 export interface TelegramMessage {
   message_id: number;
   chat: { id: number; type: string };
+  /** Instante do EVENTO (epoch seconds). Define a data das tarefas; nunca o relógio da Lambda. */
+  date?: number;
   text?: string;
 }
 

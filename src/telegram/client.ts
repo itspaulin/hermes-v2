@@ -22,6 +22,7 @@ export class TelegramApiError extends Error {
 export function createTelegramClient(
   botToken: string,
   fetchImpl: typeof fetch = fetch,
+  timeoutMs = 10_000,
 ): TelegramClient {
   return {
     async sendMessage(chatId, text) {
@@ -29,12 +30,13 @@ export function createTelegramClient(
       try {
         res = await fetchImpl(`https://api.telegram.org/bot${botToken}/sendMessage`, {
           method: "POST",
+          signal: AbortSignal.timeout(timeoutMs),
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ chat_id: chatId, text }),
         });
       } catch {
         // Mensagem sem detalhes do erro original: a URL contém o token.
-        throw new TelegramApiError("Falha de rede ao chamar a API do Telegram");
+        throw new TelegramApiError("Falha de rede ou timeout ao chamar a API do Telegram");
       }
       if (!res.ok) {
         throw new TelegramApiError(`Telegram sendMessage falhou: HTTP ${res.status}`, res.status);

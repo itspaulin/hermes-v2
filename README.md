@@ -2,7 +2,7 @@
 
 Bot de metas, tarefas, check-ins e acompanhamento. Telegram é a interface, o Obsidian Vault (via GitHub) é a fonte de verdade, AWS executa.
 
-Status: fundação + Telegram básico (`/start`, `/ping`). Sem Vault, sem Scheduler, sem domínio (metas/tarefas) ainda.
+Status: fundação + Telegram (`/start`, `/ping`) + tarefas (`/tarefa`, `/feita`, `/cancelar`) gravadas no Vault via GitHub. Sem `/hoje`, `/semana`, metas, check-ins nem Scheduler ainda. Ainda não implantado na AWS.
 
 ## Arquitetura
 
@@ -51,16 +51,20 @@ O prefixo é o parâmetro `SsmPrefix` do `template.yaml`. Nenhum valor vai no c�
 
 Respostas do webhook: 401 secret errado, 400 payload inválido, 200 ignorado/respondido, 500 falha transitória do Telegram (para ele reenviar). Chat fora da allowlist é ignorado em silêncio.
 
-## Vault (futuro)
-
-O Hermes só escreve em `Hermes/{metas,tarefas,checkins,revisoes}`. O resto do Vault está fora do escopo. Um commit por operação via GitHub Contents/Data API. Idempotência por IDs determinísticos, sem dedupe em memória.
-
 ## Comandos
 
 ```
-npm run smoke:vault   # smoke test REAL do Vault, ver docs/smoke-test.md
-npm run test:integration   # TaskRepository sobre o GitHub real (VAULT_* + SSM); limpa o que cria
-npm run typecheck
-npm test          # roda com TZ=UTC e TZ=Asia/Tokyo
-npm run build     # sam build
+/tarefa <título>
+/tarefa <título> até AAAA-MM-DD      # só AAAA-MM-DD; datas relativas ("amanhã") são recusadas
+/feita <id-ou-trecho>
+/cancelar <id-ou-trecho>
+/start   /ping
 ```
+
+- O ID da tarefa é `AAAA-MM-DD-<slug do título>`, com a data do **evento** (`message.date` do Telegram), não a do processamento. Mesmo título no mesmo dia é a mesma tarefa: reenviar não duplica.
+- `/feita` e `/cancelar` aceitam o ID completo ou um trecho (normalizado como slug), resolvido **só entre tarefas pendentes**. Um ID completo também acha tarefa já feita (resposta "Já estava feita", sem commit). Zero ou várias correspondências: "Tarefa não encontrada." ou a lista de candidatos, sem alterar nada.
+- Erros: pedido inválido, tarefa inexistente, nota inválida, conflito não recuperável e erro de credencial/permissão do Vault respondem 200 com mensagem (reenviar não adianta). Vault/GitHub indisponível (5xx, 429, rate limit, rede, timeout de 10 s) e erro inesperado respondem 500 para o Telegram reenviar; tudo é idempotente.
+
+## Vault
+
+O Hermes só escreve em `Hermes/{metas,tarefas,checkins,revisoes}` (hoje só `tarefas`). O resto do Vault está fora do escopo. Um commit por operação via GitHub Contents API, direto no branch configurado (`VAULT_REPO`, `VAULT_BRANCH`; o PAT fica no SSM em `VAULT_GITHUB_TOKEN_PARAM`). Contrato completo em `docs/vault-contract.md`.

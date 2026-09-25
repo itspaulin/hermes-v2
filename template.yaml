@@ -15,6 +15,18 @@ Parameters:
     Default: /hermes/prod/telegram
     Description: Prefixo dos parâmetros SecureString (bot-token, webhook-secret, allowed-chat-ids)
 
+  VaultRepo:
+    Type: String
+    Default: itspaulin/obsidian-vault
+    Description: Repositório privado do Vault (owner/repo). Não é segredo.
+  VaultBranch:
+    Type: String
+    Default: main
+  VaultTokenParam:
+    Type: String
+    Default: /hermes/prod/vault/github-token
+    Description: Nome (não o valor) do parâmetro SecureString com o PAT fine-grained do Vault
+
 Resources:
   HermesFunction:
     Type: AWS::Serverless::Function
@@ -34,6 +46,9 @@ Resources:
           TELEGRAM_BOT_TOKEN_PARAM: !Sub "${SsmPrefix}/bot-token"
           TELEGRAM_WEBHOOK_SECRET_PARAM: !Sub "${SsmPrefix}/webhook-secret"
           TELEGRAM_ALLOWED_CHAT_IDS_PARAM: !Sub "${SsmPrefix}/allowed-chat-ids"
+          VAULT_REPO: !Ref VaultRepo
+          VAULT_BRANCH: !Ref VaultBranch
+          VAULT_GITHUB_TOKEN_PARAM: !Ref VaultTokenParam
       Policies:
         - Version: "2012-10-17"
           Statement:
@@ -43,6 +58,7 @@ Resources:
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SsmPrefix}/bot-token"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SsmPrefix}/webhook-secret"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SsmPrefix}/allowed-chat-ids"
+                - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${VaultTokenParam}"
       Events:
         TelegramWebhook:
           Type: HttpApi

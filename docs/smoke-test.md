@@ -74,3 +74,9 @@ Cenários: criar (conteúdo exato no GitHub, 1 commit), encontrar, concluir (só
 Isolamento: os arquivos usam o ID `2020-01-01-it-<runid>-...`. No fim, só os caminhos criados pela própria execução (e que casam com esse padrão) são removidos direto pela API, fora do domínio. Se a limpeza falhar, os caminhos restantes são impressos.
 
 A data fixa é 2020-01-01 de propósito: em 2000-01-01 o Brasil estava em horário de verão (`-02:00`), o que a conversão por IANA acerta, mas complicaria as expectativas do teste.
+
+## Integração real ponta a ponta (handler)
+
+`test/integration/telegram-tasks.itest.ts` roda também pelo `npm run test:integration`: update do Telegram, handler, router, `TaskRepository`, `GitHubVaultStore` e GitHub real, verificando o resultado **lendo o Vault direto pela API** (`test/integration/github-raw.ts`). Cobre: `/tarefa` com prazo (conteúdo exato e 1 commit), reenvio sem duplicar, `/feita` preservando edição manual do corpo, `/cancelar` e no-op por ID, trecho ambíguo sem alteração, `message.date` às 23:59 processada às 00:01 do dia seguinte, chat não autorizado e credencial inválida (GitHub real responde 401: resposta genérica 200, sem vazar o token).
+
+Não cobre: Lambda, API Gateway e Telegram reais (o cold start com SSM e o `setWebhook` só se provam no primeiro deploy).

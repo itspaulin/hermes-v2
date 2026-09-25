@@ -3,7 +3,10 @@ import { createHandler } from "../src/handler.js";
 import { createTelegramClient, TelegramApiError, type TelegramClient } from "../src/telegram/client.js";
 import { loadTelegramConfig, telegramParamNamesFromEnv } from "../src/telegram/config.js";
 import { createSsmReader, type ParameterReader } from "../src/ssm.js";
-import { parseCommand, routeText } from "../src/telegram/router.js";
+import { parseCommand, routeMessage } from "../src/telegram/router.js";
+import { TaskRepository } from "../src/domain/task-repository.js";
+import { InMemoryVaultStore } from "../src/vault/memory-store.js";
+import { guardVaultStore } from "../src/vault/store.js";
 import { fakeClock } from "../src/time/index.js";
 
 const SECRET = "s3cret";
@@ -16,6 +19,7 @@ function setup(sendMessage: TelegramClient["sendMessage"] = async () => {}) {
     config: { botToken: "tok", webhookSecret: SECRET, allowedChatIds: [ALLOWED] },
     client: { sendMessage: send },
     clock,
+    tasks: new TaskRepository(guardVaultStore(new InMemoryVaultStore()), clock),
   });
   return { send, handler };
 }
@@ -62,10 +66,14 @@ describe("allowlist de chat_id", () => {
 });
 
 describe("comandos", () => {
-  it("/start", () => expect(routeText("/start", clock)).toBe("Hermes online.\n\nUse /ping para testar a conexão."));
+  const deps = { clock, tasks: new TaskRepository(guardVaultStore(new InMemoryVaultStore()), clock) };
+  const route = (text: string) => routeMessage(text, undefined, deps);
 
-  it("/ping devolve hora de SP", () => {
-    expect(routeText("/ping", clock)).toBe("pong 2026-09-25T14:30:00-03:00");
+  it("/start", async () =>
+    expect(await route("/start")).toBe("Hermes online.\n\nUse /ping para testar a conexão."));
+
+  it("/ping devolve hora de SP", async () => {
+    expect(await route("/ping")).toBe("pong 2026-09-25T14:30:00-03:00");
   });
 
   it("aceita @bot, argumentos e maiúsculas", () => {
@@ -74,12 +82,13 @@ describe("comandos", () => {
     expect(parseCommand("  /start")).toBe("start");
   });
 
-  it("comando desconhecido", () => {
-    expect(routeText("/foo", clock)).toContain("Comando desconhecido: /foo");
+  it("comando desconhecido", async () => {
+    expect(await route("/foo")).toContain("Comando desconhecido: /foo");
+    expect(await route("/foo")).toContain("/tarefa, /feita, /cancelar, /ping");
   });
 
-  it("mensagem sem comando", () => {
-    expect(routeText("oi", clock)).toContain("Envie um comando");
+  it("mensagem sem comando", async () => {
+    expect(await route("oi")).toContain("Envie um comando");
     expect(parseCommand("olá /ping")).toBeNull();
     expect(parseCommand("/")).toBeNull();
   });
@@ -124,9 +133,10 @@ describe("erros da API do Telegram", () => {
     expect(await handler(event({ body: msg("/ping") }))).toMatchObject({ statusCode: 200 });
   });
 
-  it("erro inesperado propaga", async () => {
+  it("erro inesperado ao responder: 500 (Telegram reenvia)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
     const { handler } = setup(async () => { throw new Error("bug"); });
-    await expect(handler(event({ body: msg("/ping") }))).rejects.toThrow("bug");
+    expect(await handler(event({ body: msg("/ping") }))).toMatchObject({ statusCode: 500 });
   });
 });
 

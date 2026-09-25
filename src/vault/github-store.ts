@@ -27,6 +27,8 @@ export interface GitHubVaultDeps {
   fetch?: typeof fetch;
   /** Espera entre tentativas de create em corrida de branch. Injetável para testes. */
   sleep?: (ms: number) => Promise<void>;
+  /** Timeout de cada requisição ao GitHub (padrão 10 s). Estouro vira VaultUnavailable. */
+  timeoutMs?: number;
 }
 
 const API = "https://api.github.com";
@@ -54,6 +56,7 @@ class GitHubVaultStore implements VaultStore {
   private readonly fetchImpl: typeof fetch;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly repoBase: string;
+  private readonly timeoutMs: number;
   /** Verdadeiro depois de qualquer resposta que prove que repo, branch e token funcionam. */
   private verified = false;
 
@@ -70,6 +73,7 @@ class GitHubVaultStore implements VaultStore {
     if (config.token.trim() === "") throw new Error("token do GitHub vazio");
     this.fetchImpl = deps.fetch ?? fetch;
     this.sleep = deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+    this.timeoutMs = deps.timeoutMs ?? 10_000;
     this.repoBase = `${API}/repos/${config.owner}/${config.repo}`;
   }
 
@@ -168,6 +172,7 @@ class GitHubVaultStore implements VaultStore {
     try {
       res = await this.fetchImpl(url, {
         method,
+        signal: AbortSignal.timeout(this.timeoutMs),
         headers: {
           authorization: `Bearer ${this.config.token}`,
           accept: "application/vnd.github+json",
@@ -178,8 +183,8 @@ class GitHubVaultStore implements VaultStore {
         ...(body !== undefined && { body: JSON.stringify(body) }),
       });
     } catch {
-      // Sem detalhes do erro original, por precaução com o token.
-      throw new VaultUnavailable("Falha de rede ao chamar o GitHub");
+      // Rede, DNS ou timeout. Sem detalhes do erro original, por precaução com o token.
+      throw new VaultUnavailable("Falha de rede ou timeout ao chamar o GitHub");
     }
     let json: unknown;
     try {

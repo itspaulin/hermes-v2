@@ -34,6 +34,7 @@ console.log("");
 for (const s of result.steps) console.log(`${s.ok ? "OK  " : "FALHA"} ${s.name}${s.detail ? `  [${s.detail}]` : ""}`);
 
 console.log(`\nArquivo de teste: ${result.path}`);
-console.log(`Confira em https://github.com/${config.owner}/${config.repo}/commits/${config.branch} (2 commits "hermes: create/update ...")`);
+if (process.argv.includes("--check-update-missing")) console.log(`Arquivo extra:   ${result.path.replace("smoke-test", "smoke-missing")}`);
+console.log(`Confira em https://github.com/${config.owner}/${config.repo}/commits/${config.branch} (commits "hermes: create/update ...")`);
 console.log("O Hermes nunca apaga arquivos: remova o arquivo de teste manualmente.");
 process.exit(result.ok ? 0 : 1);

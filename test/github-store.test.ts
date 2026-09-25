@@ -74,8 +74,11 @@ describe.each(impls)("contrato VaultStore: %s", (_name, make) => {
     expect((await i.store.read(P))?.content).toBe("editado à mão");
   });
 
-  it("update de arquivo inexistente: conflict", async () => {
-    expect(await make().store.update(P, "abc", "b")).toBe("conflict");
+  it("update de arquivo inexistente CRIA o arquivo e devolve ok (GitHub real, smoke test 2026-09)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { store } = make();
+    expect(await store.update(P, "abc", "b")).toBe("ok");
+    expect((await store.read(P))?.content).toBe("b");
   });
 
   it("preserva unicode, emoji, CRLF e linhas longas (base64 com quebras)", async () => {
@@ -267,7 +270,14 @@ describe("GitHubVaultStore: tradução de erros da API", () => {
     await expect(scripted(json(422, { message: "content invalid" })).store.update(P, "s", "a")).rejects.toBeInstanceOf(VaultApiError);
   });
 
-  it("update: 404 = 'conflict' só com branch existente; senão erro de configuração", async () => {
+  it("update: 201 (arquivo recriado) devolve ok e registra aviso no stdout", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await scripted(json(201, {})).store.update(P, "s", "a")).toBe("ok");
+    expect(err).toHaveBeenCalledWith(expect.stringContaining(`update recriou arquivo removido: ${P}`));
+    err.mockRestore();
+  });
+
+  it("update: 404 (defensivo; o GitHub real não responde assim) = 'conflict' só com branch existente", async () => {
     expect(await scripted(json(404, {}), json(200, {})).store.update(P, "s", "a")).toBe("conflict");
     await expect(scripted(json(404, {}), json(404, {})).store.update(P, "s", "a")).rejects.toBeInstanceOf(VaultApiError);
   });

@@ -8,7 +8,7 @@ import { guardVaultStore, type VaultFile, type VaultStore } from "./store.js";
  *
  *   404 (arquivo)        -> null / lista vazia
  *   422 "sha" (create)   -> "exists"
- *   409 ou 422 "sha" (update), arquivo sumido -> "conflict"
+ *   409 ou 422 "sha" (update) -> "conflict"; update de arquivo removido -> GitHub RECRIA (201) -> "ok"
  *   429, 5xx, rate limit, rede -> VaultUnavailable (Telegram reenvia; tudo é idempotente)
  *   401, 403, repo/branch inexistente, outros 4xx -> VaultApiError (não adianta reenviar)
  *
@@ -119,6 +119,9 @@ class GitHubVaultStore implements VaultStore {
     });
     if (res.status === 200 || res.status === 201) {
       this.verified = true;
+      // 201 = o arquivo não existia e o GitHub o criou (comportamento real, ignora o sha).
+      // Aconteceu se ele foi removido entre o read e este update. Fica registrado no stdout.
+      if (res.status === 201) console.error(`[vault] update recriou arquivo removido: ${path}`);
       return "ok";
     }
     if (res.status === 409 || (res.status === 422 && mentionsSha(res.json))) {

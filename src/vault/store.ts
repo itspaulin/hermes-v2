@@ -16,8 +16,12 @@ export interface VaultStore {
   /** Criar-se-não-existir. "exists" se o caminho já existe (conteúdo não é tocado). */
   create(path: string, content: string): Promise<"created" | "exists">;
   /**
-   * Atualiza com lock otimista. "conflict" se o sha não é o atual
-   * (inclui arquivo que deixou de existir: o chamador relê e decide).
+   * Atualiza com lock otimista. "conflict" se o sha não é o atual.
+   *
+   * ATENÇÃO (verificado no GitHub real, ver docs/smoke-test.md): se o arquivo NÃO existe
+   * mais, o GitHub cria o arquivo (201) em vez de recusar, e o resultado é "ok". Não há
+   * como impedir isso de forma atômica. O domínio não deve depender de "conflict" para
+   * arquivo removido; a janela é só o intervalo entre o read e o update.
    */
   update(path: string, sha: string, content: string): Promise<"ok" | "conflict">;
   /** Caminhos dos arquivos .md diretamente dentro de `dir` (não recursivo). */

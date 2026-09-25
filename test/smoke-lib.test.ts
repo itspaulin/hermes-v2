@@ -24,11 +24,13 @@ describe("roteiro do smoke test (contra o GitHub falso)", () => {
     expect(gh.commitMessages).toEqual([`hermes: create ${r.path}`, `hermes: update ${r.path}`]);
   });
 
-  it("--check-update-missing: passa e não cria o arquivo ausente", async () => {
+  it("--check-update-missing: caracteriza que o update de inexistente cria o arquivo", async () => {
     const { gh, store } = fakeStore();
+    vi.spyOn(console, "error").mockImplementation(() => {});
     const r = await runVaultSmoke(store, { suffix: "abc12345", checkUpdateMissing: true });
     expect(r.ok).toBe(true);
-    expect(gh.commits).toHaveLength(2);
+    expect(gh.commits.map((c) => c.op)).toEqual(["create", "update", "create"]);
+    expect(gh.commits[2]!.path).toContain("smoke-missing-abc12345");
   });
 
   it("para no primeiro passo que falha e o reporta", async () => {

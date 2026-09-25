@@ -18,7 +18,8 @@ export function blobSha(content: string): string {
 /**
  * VaultStore em memória com a semântica do GitHub Contents API, para testes:
  * - create em caminho existente: "exists" (o 422 do GitHub)
- * - update com sha desatualizado ou arquivo inexistente: "conflict"
+ * - update com sha desatualizado: "conflict"
+ * - update de arquivo inexistente: CRIA o arquivo e devolve "ok" (comportamento real do GitHub)
  * - cada escrita que muda algo registra um "commit"; update idêntico não registra
  *
  * NÃO aplica a guarda de caminhos: use guardVaultStore(...) por cima, como em produção.
@@ -56,7 +57,12 @@ export class InMemoryVaultStore implements VaultStore {
   async update(path: string, sha: string, content: string): Promise<"ok" | "conflict"> {
     this.beforeWrite?.("update", path);
     const current = this.files.get(path);
-    if (current === undefined || blobSha(current) !== sha) return "conflict";
+    if (current === undefined) {
+      this.files.set(path, content);
+      this.commits.push({ op: "create", path });
+      return "ok";
+    }
+    if (blobSha(current) !== sha) return "conflict";
     if (current === content) return "ok";
     this.files.set(path, content);
     this.commits.push({ op: "update", path });

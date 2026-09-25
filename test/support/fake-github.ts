@@ -73,15 +73,15 @@ export class FakeGitHub {
     // PUT
     if (body.branch !== this.branch) return json(404, { message: "Branch not found" });
     const content = Buffer.from(body.content, "base64").toString("utf8");
-    const exists = this.files.has(path);
     this.beforeWrite?.(body.sha === undefined ? "create" : "update", path);
     const currentExists = this.files.has(path);
     if (body.sha === undefined) {
       if (currentExists) return json(422, { message: 'Invalid request.\n\n"sha" wasn\'t supplied.' });
       return this.commit("create", path, content, body.message, 201);
     }
-    if (!currentExists && !exists) return json(404, { message: "Not Found" });
-    if (!currentExists || blobSha(this.files.get(path)!) !== body.sha) {
+    // Comportamento real (smoke test): PUT com sha em arquivo inexistente CRIA o arquivo (201).
+    if (!currentExists) return this.commit("create", path, content, body.message, 201);
+    if (blobSha(this.files.get(path)!) !== body.sha) {
       return json(409, { message: `${path} does not match ${body.sha}` });
     }
     if (this.files.get(path) === content) return json(200, { content: { sha: body.sha } });

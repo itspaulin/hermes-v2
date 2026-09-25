@@ -129,6 +129,8 @@ Fluxo de atualização:
 
 Como as operações são sets sobre campos, reaplicar sobre a versão nova preserva a sua edição manual em qualquer outro campo ou no corpo.
 
+**Limitação conhecida (descoberta no smoke test real):** o `PUT` da Contents API com `sha` num caminho que não existe mais não falha, cria o arquivo. Se você apagar uma nota exatamente entre o read e o update do Hermes (janela de milissegundos), a nota reaparece com a alteração pedida. Não há como evitar isso de forma atômica com essa API. O aviso `[vault] update recriou arquivo removido: <caminho>` vai para o stdout. Apagar uma nota *antes* da operação funciona normalmente: o `read` dá `null` e o Hermes responde que a tarefa não existe.
+
 Se você editar o **mesmo campo** que o Hermes está mudando (ex.: `status`), vence o último `PUT` aceito pelo GitHub, e isso é aceito.
 
 Sincronização no lado do Obsidian (obsidian-git ou similar): o Hermes commita direto no branch configurado. Uma edição local sua ainda não enviada em `Hermes/` pode gerar conflito **no seu git** quando você fizer pull. Recomendação: fazer pull antes de editar arquivos em `Hermes/` e commitar em seguida.
@@ -171,7 +173,7 @@ aplicam assertHermesPath, parse/validação de frontmatter e a lógica da seçã
 
 Erros tipados: `VaultConflict`, `VaultInvalidNote`, `VaultPathViolation`, `VaultUnavailable` (429, 5xx, rate limit, rede) e `VaultApiError` (resposta não transitória: token inválido, sem permissão, repo ou branch inexistente, validação). Só `VaultUnavailable` deve virar 500 no webhook (o Telegram reenvia; seguro porque tudo é idempotente). Os demais viram resposta ao usuário com HTTP 200.
 
-Tradução do `GitHubVaultStore` (nada da API vaza para o domínio): 404 de arquivo vira `null` ou lista vazia (confirmando uma vez que o branch é acessível, porque 404 também significa repo/branch/permissão errados); 422 com "sha" ao criar vira `exists`; 409 (ou 422 com "sha") ao atualizar vira `conflict`; 409 ao criar (corrida de branch com outro escritor) refaz até 3 vezes, depois `VaultUnavailable`; 429, 5xx, rate limit e falha de rede viram `VaultUnavailable`; o resto vira `VaultApiError`. Conteúdo que não seja UTF-8 válido é recusado (`VaultInvalidNote`) em vez de decodificado com perda, porque reescrever corromperia o corpo; arquivos acima de 1 MB e listagens com 1000+ itens (truncadas pela API) também falham alto.
+Tradução do `GitHubVaultStore` (nada da API vaza para o domínio): 404 de arquivo vira `null` ou lista vazia (confirmando uma vez que o branch é acessível, porque 404 também significa repo/branch/permissão errados); 422 com "sha" ao criar vira `exists`; 409 (ou 422 com "sha") ao atualizar vira `conflict`; **update de arquivo removido (verificado no GitHub real): o GitHub ignora o sha e CRIA o arquivo (201), e o store devolve `ok` com um aviso no stdout** (ver seção 7); 409 ao criar (corrida de branch com outro escritor) refaz até 3 vezes, depois `VaultUnavailable`; 429, 5xx, rate limit e falha de rede viram `VaultUnavailable`; o resto vira `VaultApiError`. Conteúdo que não seja UTF-8 válido é recusado (`VaultInvalidNote`) em vez de decodificado com perda, porque reescrever corromperia o corpo; arquivos acima de 1 MB e listagens com 1000+ itens (truncadas pela API) também falham alto.
 
 Commits: um por operação que altera algo, no branch configurado. O store não conhece tipos de nota, então a mensagem é derivada do caminho: `hermes: create <caminho>` ou `hermes: update <caminho>` (ex.: `hermes: create Hermes/tarefas/2026-09-25-estudar-system-design.md`).
 

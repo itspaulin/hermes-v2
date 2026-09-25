@@ -44,8 +44,11 @@ describe("InMemoryVaultStore (semântica do GitHub)", () => {
     expect(s.commits).toHaveLength(1);
   });
 
-  it("update de arquivo inexistente é conflito", async () => {
-    expect(await new InMemoryVaultStore().update(P, "x", "b")).toBe("conflict");
+  it("update de arquivo inexistente CRIA o arquivo (como o GitHub real, verificado no smoke test)", async () => {
+    const s = new InMemoryVaultStore();
+    expect(await s.update(P, "x", "b")).toBe("ok");
+    expect((await s.read(P))?.content).toBe("b");
+    expect(s.commits).toEqual([{ op: "create", path: P }]);
   });
 
   it("update idêntico não gera commit", async () => {

@@ -10,7 +10,7 @@ export interface SmokeStep {
 export interface SmokeOptions {
   /** Sufixo único do arquivo de teste (ex.: hex aleatório). */
   suffix: string;
-  /** Opcional: também verifica update de arquivo inexistente (esperado: "conflict"). */
+  /** Opcional: caracteriza update de arquivo inexistente (o GitHub real cria o arquivo). */
   checkUpdateMissing?: boolean;
 }
 
@@ -20,7 +20,7 @@ const V2 = `${V1}\nsegunda versão\n`;
 /**
  * Roteiro do smoke test do Vault. Recebe um VaultStore já pronto (GitHub real no script,
  * GitHub falso nos testes). Pára no primeiro passo que falhar (os seguintes dependem dele).
- * O único artefato deixado é um arquivo de teste em Hermes/tarefas/, que o Hermes nunca apaga.
+ * Deixa arquivos de teste em Hermes/tarefas/ (2000-01-01-smoke-*), que o Hermes nunca apaga.
  */
 export async function runVaultSmoke(
   store: VaultStore,
@@ -103,10 +103,13 @@ export async function runVaultSmoke(
   ];
 
   if (opts.checkUpdateMissing) {
-    plan.push(["update de arquivo inexistente → conflict", async () => {
-      expectEq(await store.update(missing, blobSha("x"), "x"), "conflict");
-      expectEq(await store.read(missing), null); // não pode ter criado o arquivo
-      return "conflict";
+    // Caracterização (não é requisito): no GitHub real o PUT com sha em caminho inexistente
+    // CRIA o arquivo (201). Este passo garante que o store reporta isso como "ok".
+    // Deixa um segundo arquivo de teste (smoke-missing) para remover manualmente.
+    plan.push(["update de inexistente → GitHub recria (ok); arquivo passa a existir", async () => {
+      expectEq(await store.update(missing, blobSha("x"), "x"), "ok");
+      expectEq((await store.read(missing))?.content, "x");
+      return "ok (criado)";
     }]);
   }
 

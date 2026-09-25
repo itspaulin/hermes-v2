@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { TaskNotFound, TaskRepository, TaskValidationError, type CreateTaskInput } from "../src/domain/task-repository.js";
 import { parseTask, taskPath } from "../src/domain/task.js";
 import { fakeClock } from "../src/time/index.js";
@@ -402,12 +402,21 @@ describe("CONCORRÊNCIA: releitura e reaplicação, nunca escrita forçada", () 
     expect((await mem.read(PATH))!.content).toBe(USER_NOTE.replace("status: pendente", "status: feita"));
   });
 
-  it("arquivo some durante a operação: TaskNotFound", async () => {
+  it("arquivo removido entre o read e o update: o GitHub recria (limitação conhecida, janela mínima)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
     const { repo, mem } = setup();
     mem.externalWrite(PATH, USER_NOTE);
     mem.beforeWrite = (op) => {
       if (op === "update") mem.externalDelete(PATH);
     };
+    // O PUT com sha em caminho inexistente cria o arquivo: a operação pedida se completa.
+    const r = await repo.complete(ID);
+    expect(r.changed).toBe(true);
+    expect((await mem.read(PATH))!.content).toContain("status: feita");
+  });
+
+  it("arquivo removido ANTES da operação: TaskNotFound", async () => {
+    const { repo } = setup();
     await expect(repo.complete(ID)).rejects.toBeInstanceOf(TaskNotFound);
   });
 });

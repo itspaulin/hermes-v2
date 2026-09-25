@@ -37,7 +37,15 @@ docs/
 
 ## Telegram
 
-Variáveis (hoje env vars; depois SSM SecureString): `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_ALLOWED_CHAT_IDS` (separados por vírgula). Nada disso vai no código nem no `template.yaml`.
+Config vem do SSM Parameter Store (SecureString), lida em runtime no cold start (3 `GetParameter` em paralelo) e cacheada em memória só como otimização. A Lambda recebe apenas os **nomes** dos parâmetros (`TELEGRAM_*_PARAM`); a IAM permite só `ssm:GetParameter` nesses três:
+
+```
+/hermes/prod/telegram/bot-token
+/hermes/prod/telegram/webhook-secret
+/hermes/prod/telegram/allowed-chat-ids     # separados por vírgula
+```
+
+O prefixo é o parâmetro `SsmPrefix` do `template.yaml`. Nenhum valor vai no código nem no template.
 
 Respostas do webhook: 401 secret errado, 400 payload inválido, 200 ignorado/respondido, 500 falha transitória do Telegram (para ele reenviar). Chat fora da allowlist é ignorado em silêncio.
 

@@ -15,7 +15,7 @@ export function routeText(text: string, clock: Clock): string {
     case null:
       return "Envie um comando. Disponíveis: /start, /ping";
     case "start":
-      return "Hermes v2 online. Comandos: /start, /ping";
+      return "Hermes online.\n\nUse /ping para testar a conexão.";
     case "ping":
       return `pong ${nowIso(clock)}`;
     default:

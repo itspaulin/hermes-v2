@@ -9,6 +9,12 @@ Globals:
     Timeout: 30
     MemorySize: 256
 
+Parameters:
+  SsmPrefix:
+    Type: String
+    Default: /hermes/prod/telegram
+    Description: Prefixo dos parâmetros SecureString (bot-token, webhook-secret, allowed-chat-ids)
+
 Resources:
   HermesFunction:
     Type: AWS::Serverless::Function
@@ -23,6 +29,20 @@ Resources:
     Properties:
       Handler: handler.handler
       CodeUri: .
+      Environment:
+        Variables:
+          TELEGRAM_BOT_TOKEN_PARAM: !Sub "${SsmPrefix}/bot-token"
+          TELEGRAM_WEBHOOK_SECRET_PARAM: !Sub "${SsmPrefix}/webhook-secret"
+          TELEGRAM_ALLOWED_CHAT_IDS_PARAM: !Sub "${SsmPrefix}/allowed-chat-ids"
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action: ssm:GetParameter
+              Resource:
+                - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SsmPrefix}/bot-token"
+                - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SsmPrefix}/webhook-secret"
+                - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SsmPrefix}/allowed-chat-ids"
       Events:
         TelegramWebhook:
           Type: HttpApi

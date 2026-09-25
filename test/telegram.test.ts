@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { createHandler } from "../src/handler.js";
 import { createTelegramClient, TelegramApiError, type TelegramClient } from "../src/telegram/client.js";
-import { loadTelegramConfig } from "../src/telegram/config.js";
+import { loadTelegramConfig, telegramParamNamesFromEnv } from "../src/telegram/config.js";
+import { createSsmReader, type ParameterReader } from "../src/ssm.js";
 import { parseCommand, routeText } from "../src/telegram/router.js";
 import { fakeClock } from "../src/time/index.js";
 
@@ -50,7 +51,7 @@ describe("allowlist de chat_id", () => {
   it("autorizado responde", async () => {
     const { handler, send } = setup();
     await handler(event({ body: msg("/start") }));
-    expect(send).toHaveBeenCalledWith(ALLOWED, expect.stringContaining("online"));
+    expect(send).toHaveBeenCalledWith(ALLOWED, expect.stringContaining("Use /ping"));
   });
 
   it("não autorizado: 200 silencioso, sem resposta", async () => {
@@ -61,7 +62,7 @@ describe("allowlist de chat_id", () => {
 });
 
 describe("comandos", () => {
-  it("/start", () => expect(routeText("/start", clock)).toContain("Hermes v2 online"));
+  it("/start", () => expect(routeText("/start", clock)).toBe("Hermes online.\n\nUse /ping para testar a conexão."));
 
   it("/ping devolve hora de SP", () => {
     expect(routeText("/ping", clock)).toBe("pong 2026-09-25T14:30:00-03:00");
@@ -156,19 +157,83 @@ describe("createTelegramClient", () => {
   });
 });
 
-describe("loadTelegramConfig", () => {
-  const env = { TELEGRAM_BOT_TOKEN: "t", TELEGRAM_WEBHOOK_SECRET: "s", TELEGRAM_ALLOWED_CHAT_IDS: "1, 2,-3" };
-
-  it("lê e converte chat ids", () => {
-    expect(loadTelegramConfig(env)).toEqual({ botToken: "t", webhookSecret: "s", allowedChatIds: [1, 2, -3] });
+describe("config via SSM", () => {
+  const names = { botToken: "/p/bot-token", webhookSecret: "/p/webhook-secret", allowedChatIds: "/p/allowed-chat-ids" };
+  const values: Record<string, string> = {
+    "/p/bot-token": "123:SUPER-TOKEN",
+    "/p/webhook-secret": "SUPER-SECRET",
+    "/p/allowed-chat-ids": "1, 2,-3",
+  };
+  const reader = (v: Record<string, string> = values): ParameterReader => ({
+    get: vi.fn(async (n: string) => {
+      const x = v[n];
+      if (x === undefined) throw new Error(`Parâmetro SSM vazio ou ausente: ${n}`);
+      return x;
+    }),
   });
 
-  it.each(["TELEGRAM_BOT_TOKEN", "TELEGRAM_WEBHOOK_SECRET", "TELEGRAM_ALLOWED_CHAT_IDS"])("falta %s", (k) => {
-    expect(() => loadTelegramConfig({ ...env, [k]: undefined })).toThrow(k);
+  it("lê os três parâmetros e converte chat ids", async () => {
+    expect(await loadTelegramConfig(reader(), names)).toEqual({
+      botToken: "123:SUPER-TOKEN",
+      webhookSecret: "SUPER-SECRET",
+      allowedChatIds: [1, 2, -3],
+    });
   });
 
-  it("chat id inválido ou lista vazia", () => {
-    expect(() => loadTelegramConfig({ ...env, TELEGRAM_ALLOWED_CHAT_IDS: "abc" })).toThrow("inválido");
-    expect(() => loadTelegramConfig({ ...env, TELEGRAM_ALLOWED_CHAT_IDS: " , " })).toThrow("vazio");
+  it("busca em paralelo: os 3 gets começam antes de qualquer um terminar", async () => {
+    let started = 0;
+    let maxInFlight = 0;
+    const r: ParameterReader = {
+      async get(n) {
+        started++;
+        maxInFlight = Math.max(maxInFlight, started);
+        await Promise.resolve();
+        started--;
+        return values[n]!;
+      },
+    };
+    await loadTelegramConfig(r, names);
+    expect(maxInFlight).toBe(3);
+  });
+
+  it("parâmetro ausente: erro cita o nome, não valores", async () => {
+    const { "/p/webhook-secret": _omit, ...rest } = values;
+    const err = await loadTelegramConfig(reader(rest), names).catch((e) => e);
+    expect(err.message).toContain("/p/webhook-secret");
+    expect(err.message).not.toContain("SUPER");
+  });
+
+  it("chat ids inválidos: erro não vaza nenhum valor do SSM", async () => {
+    for (const bad of ["abc", " , "]) {
+      const err = await loadTelegramConfig(reader({ ...values, "/p/allowed-chat-ids": bad }), names).catch((e) => e);
+      expect(err).toBeInstanceOf(Error);
+      expect(err.message).not.toContain("SUPER");
+      expect(err.message).not.toContain(bad.trim() || "\u0000");
+    }
+  });
+
+  it("nomes vêm de env vars; falta uma: erro cita a variável", () => {
+    const env = {
+      TELEGRAM_BOT_TOKEN_PARAM: "/p/bot-token",
+      TELEGRAM_WEBHOOK_SECRET_PARAM: "/p/webhook-secret",
+      TELEGRAM_ALLOWED_CHAT_IDS_PARAM: "/p/allowed-chat-ids",
+    };
+    expect(telegramParamNamesFromEnv(env)).toEqual(names);
+    expect(() => telegramParamNamesFromEnv({ ...env, TELEGRAM_BOT_TOKEN_PARAM: undefined })).toThrow("TELEGRAM_BOT_TOKEN_PARAM");
+  });
+});
+
+describe("createSsmReader", () => {
+  it("pede WithDecryption e devolve o valor", async () => {
+    const send = vi.fn(async (_cmd: unknown) => ({ Parameter: { Value: "v" } }));
+    const v = await createSsmReader({ send } as never).get("/p/x");
+    expect(v).toBe("v");
+    const cmd = send.mock.calls[0]![0] as { input: unknown };
+    expect(cmd.input).toEqual({ Name: "/p/x", WithDecryption: true });
+  });
+
+  it("valor vazio: erro só com o nome", async () => {
+    const send = vi.fn(async () => ({ Parameter: { Value: "" } }));
+    await expect(createSsmReader({ send } as never).get("/p/x")).rejects.toThrow("/p/x");
   });
 });

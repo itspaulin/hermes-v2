@@ -1,6 +1,7 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda";
+import { createSsmReader } from "./ssm.js";
 import { createTelegramClient } from "./telegram/client.js";
-import { loadTelegramConfig } from "./telegram/config.js";
+import { loadTelegramConfig, telegramParamNamesFromEnv } from "./telegram/config.js";
 import { handleWebhook, type WebhookDeps } from "./telegram/webhook.js";
 import { systemClock } from "./time/index.js";
 
@@ -10,17 +11,26 @@ export function createHandler(deps: WebhookDeps) {
     handleWebhook(event, deps);
 }
 
-let cached: ReturnType<typeof createHandler> | undefined;
+// Cache do cold start: só otimização. Falha não é cacheada, a próxima invocação tenta de novo.
+let cached: Promise<ReturnType<typeof createHandler>> | undefined;
 
-/** Export de produção: monta as dependências na primeira invocação (não no import). */
-export const handler = (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
-  if (!cached) {
-    const config = loadTelegramConfig(process.env);
-    cached = createHandler({
-      config,
-      client: createTelegramClient(config.botToken),
-      clock: systemClock,
-    });
-  }
-  return cached(event);
+async function build(): Promise<ReturnType<typeof createHandler>> {
+  const config = await loadTelegramConfig(
+    createSsmReader(),
+    telegramParamNamesFromEnv(process.env),
+  );
+  return createHandler({
+    config,
+    client: createTelegramClient(config.botToken),
+    clock: systemClock,
+  });
+}
+
+/** Export de produção: monta as dependências (SSM) na primeira invocação, não no import. */
+export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
+  cached ??= build().catch((err) => {
+    cached = undefined;
+    throw err;
+  });
+  return (await cached)(event);
 };

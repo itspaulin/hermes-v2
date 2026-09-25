@@ -58,6 +58,7 @@ O Hermes só escreve em `Hermes/{metas,tarefas,checkins,revisoes}`. O resto do V
 ## Comandos
 
 ```
+npm run smoke:vault   # smoke test REAL do Vault, ver docs/smoke-test.md
 npm run typecheck
 npm test          # roda com TZ=UTC e TZ=Asia/Tokyo
 npm run build     # sam build

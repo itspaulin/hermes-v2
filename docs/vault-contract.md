@@ -175,7 +175,7 @@ Tradução do `GitHubVaultStore` (nada da API vaza para o domínio): 404 de arqu
 
 Commits: um por operação que altera algo, no branch configurado. O store não conhece tipos de nota, então a mensagem é derivada do caminho: `hermes: create <caminho>` ou `hermes: update <caminho>` (ex.: `hermes: create Hermes/tarefas/2026-09-25-estudar-system-design.md`).
 
-Configuração: `owner/repo` e branch não são segredo (env vars `VAULT_REPO=owner/repo` e `VAULT_BRANCH`); o token do GitHub (PAT fine-grained, um repositório, apenas *Contents: read and write*) fica no SSM SecureString, e a Lambda recebe só o nome do parâmetro (`VAULT_GITHUB_TOKEN_PARAM`, ex.: `/hermes/prod/github/token`). O token nunca aparece em mensagens de erro.
+Configuração: `owner/repo` e branch não são segredo (env vars `VAULT_REPO=owner/repo` e `VAULT_BRANCH`); o token do GitHub (PAT fine-grained, um repositório, apenas *Contents: read and write*) fica no SSM SecureString, e a Lambda recebe só o nome do parâmetro (`VAULT_GITHUB_TOKEN_PARAM`, ex.: `/hermes/prod/vault/github-token`). O token nunca aparece em mensagens de erro.
 
 ## 11. Testes previstos (sem GitHub real)
 

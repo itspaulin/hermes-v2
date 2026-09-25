@@ -11,5 +11,5 @@
     "noEmit": true,
     "types": ["node", "aws-lambda"]
   },
-  "include": ["src", "test"]
+  "include": ["src", "test", "scripts"]
 }

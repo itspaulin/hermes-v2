@@ -1,0 +1,27 @@
+{
+  "name": "hermes-v2",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "npm run test:utc && npm run test:tokyo",
+    "test:utc": "TZ=UTC vitest run",
+    "test:tokyo": "TZ=Asia/Tokyo vitest run",
+    "build": "sam build"
+  },
+  "dependencies": {
+    "luxon": "^3.7.2"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.163",
+    "@types/luxon": "^3.7.5",
+    "@types/node": "^26.6.2",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
+  }
+}

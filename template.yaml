@@ -1,0 +1,35 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Hermes v2 - fundação (Lambda + HTTP API)
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Architectures: [arm64]
+    Timeout: 30
+    MemorySize: 256
+
+Resources:
+  HermesFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [src/handler.ts]
+        OutExtension: [.js=.mjs]
+    Properties:
+      Handler: handler.handler
+      CodeUri: .
+      Events:
+        TelegramWebhook:
+          Type: HttpApi
+          Properties:
+            Path: /telegram/webhook
+            Method: POST
+
+Outputs:
+  WebhookUrl:
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com/telegram/webhook"

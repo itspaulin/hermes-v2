@@ -64,3 +64,13 @@ Os 10 passos principais passaram: 404 de arquivo é `null` (com a checagem únic
 1. Conferir os 2 commits no GitHub (`hermes: create ...` e `hermes: update ...`) e o conteúdo do arquivo no repositório.
 2. **Remover os arquivos de teste manualmente** (`Hermes/tarefas/2000-01-01-smoke-*`). O Hermes nunca apaga arquivos.
 3. Se algum passo falhar, anotar o status real que apareceu no log: é a informação que ajusta o mapeamento de erros do store.
+
+## Integração real do TaskRepository
+
+`npm run test:integration` (mesmas variáveis `VAULT_*`) roda `test/integration/tasks-github.itest.ts`: TaskRepository sobre o GitHub real, sem Telegram nem Lambda. Fora do `npm test`.
+
+Cenários: criar (conteúdo exato no GitHub, 1 commit), encontrar, concluir (só status, `done_at` e `updated` mudam), repetir conclusão e cancelamento (no-op, nenhum commit novo), repetir criação (mesma tarefa, sem segundo arquivo), edição manual do corpo direto no GitHub sobrevivendo ao `complete`, conflito real 409 com edição externa de corpo e frontmatter (relê, reaplica, mantém tudo), `listPending` e a guarda de caminhos contra o repositório real.
+
+Isolamento: os arquivos usam o ID `2020-01-01-it-<runid>-...`. No fim, só os caminhos criados pela própria execução (e que casam com esse padrão) são removidos direto pela API, fora do domínio. Se a limpeza falhar, os caminhos restantes são impressos.
+
+A data fixa é 2020-01-01 de propósito: em 2000-01-01 o Brasil estava em horário de verão (`-02:00`), o que a conversão por IANA acerta, mas complicaria as expectativas do teste.

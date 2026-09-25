@@ -12,7 +12,8 @@
     "test:utc": "TZ=UTC vitest run",
     "test:tokyo": "TZ=Asia/Tokyo vitest run",
     "build": "PATH=$PWD/node_modules/.bin:$PATH sam build",
-    "smoke:vault": "esbuild scripts/smoke-vault.ts --bundle --platform=node --format=esm --target=es2022 --outfile=.smoke/smoke-vault.mjs --log-level=warning --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node .smoke/smoke-vault.mjs"
+    "smoke:vault": "esbuild scripts/smoke-vault.ts --bundle --platform=node --format=esm --target=es2022 --outfile=.smoke/smoke-vault.mjs --log-level=warning --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node .smoke/smoke-vault.mjs",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@aws-sdk/client-ssm": "^3.1140.0",

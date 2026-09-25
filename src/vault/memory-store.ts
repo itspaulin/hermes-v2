@@ -35,6 +35,11 @@ export class InMemoryVaultStore implements VaultStore {
     this.files.set(path, content);
   }
 
+  /** Simula remoção externa (só para testes). */
+  externalDelete(path: string): void {
+    this.files.delete(path);
+  }
+
   async read(path: string): Promise<VaultFile | null> {
     const content = this.files.get(path);
     return content === undefined ? null : { content, sha: blobSha(content) };

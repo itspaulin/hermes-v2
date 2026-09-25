@@ -4,18 +4,50 @@ import { parseTask, taskPath } from "../src/domain/task.js";
 import { fakeClock } from "../src/time/index.js";
 import { VaultConflict, VaultInvalidNote } from "../src/vault/errors.js";
 import { InMemoryVaultStore } from "../src/vault/memory-store.js";
-import { guardVaultStore } from "../src/vault/store.js";
+import { createGitHubVaultStore } from "../src/vault/github-store.js";
+import { guardVaultStore, type VaultStore } from "../src/vault/store.js";
+import { FakeGitHub } from "./support/fake-github.js";
 
 const epoch = (iso: string) => Date.parse(iso) / 1000;
 const EVENT = epoch("2026-09-25T18:00:00Z"); // 25/09 15:00 em SP
 const ID = "2026-09-25-estudar-system-design";
 const PATH = taskPath(ID);
 
-function setup(nowIso = "2026-09-25T18:10:00Z") {
+/** Superfície de teste comum ao InMemoryVaultStore e ao GitHub falso. */
+interface TestBackend {
+  store: VaultStore;
+  externalWrite(path: string, content: string): void;
+  externalDelete(path: string): void;
+  read(path: string): Promise<{ content: string; sha: string } | null>;
+  commits: { op: string; path: string }[];
+  beforeWrite?: (op: "create" | "update", path: string) => void;
+}
+
+function memoryBackend(): TestBackend {
   const mem = new InMemoryVaultStore();
-  const clock = fakeClock(nowIso);
-  const repo = new TaskRepository(guardVaultStore(mem), clock);
-  return { mem, clock, repo };
+  return {
+    store: guardVaultStore(mem),
+    externalWrite: (p, c) => mem.externalWrite(p, c),
+    externalDelete: (p) => mem.externalDelete(p),
+    read: (p) => mem.read(p),
+    commits: mem.commits,
+    set beforeWrite(fn: TestBackend["beforeWrite"]) { mem.beforeWrite = fn; },
+  };
+}
+
+function githubBackend(): TestBackend {
+  const gh = new FakeGitHub();
+  return {
+    store: createGitHubVaultStore(
+      { owner: gh.owner, repo: gh.repo, branch: gh.branch, token: "t" },
+      { fetch: gh.fetch, sleep: async () => {} },
+    ),
+    externalWrite: (p, c) => gh.externalWrite(p, c),
+    externalDelete: (p) => gh.externalDelete(p),
+    read: (p) => gh.read(p),
+    commits: gh.commits,
+    set beforeWrite(fn: TestBackend["beforeWrite"]) { gh.beforeWrite = fn; },
+  };
 }
 
 /** Corpo = tudo depois da cerca de fechamento. */
@@ -45,6 +77,18 @@ const USER_NOTE = [
   "- Ação 日本語 🚀",
   "",
 ].join("\n");
+
+describe.each([
+  ["InMemoryVaultStore", memoryBackend],
+  ["GitHubVaultStore (GitHub falso)", githubBackend],
+] as const)("TaskRepository sobre %s", (_name, makeBackend) => {
+
+function setup(nowIso = "2026-09-25T18:10:00Z") {
+  const mem = makeBackend();
+  const clock = fakeClock(nowIso);
+  const repo = new TaskRepository(mem.store, clock);
+  return { mem, clock, repo };
+}
 
 describe("create", () => {
   it("cria com frontmatter completo e corpo inicial mínimo", async () => {
@@ -362,7 +406,7 @@ describe("CONCORRÊNCIA: releitura e reaplicação, nunca escrita forçada", () 
     const { repo, mem } = setup();
     mem.externalWrite(PATH, USER_NOTE);
     mem.beforeWrite = (op) => {
-      if (op === "update") (mem as unknown as { files: Map<string, string> }).files.delete(PATH);
+      if (op === "update") mem.externalDelete(PATH);
     };
     await expect(repo.complete(ID)).rejects.toBeInstanceOf(TaskNotFound);
   });
@@ -446,4 +490,6 @@ describe("parseTask", () => {
   it("lê uma nota escrita à mão com os campos mínimos", () => {
     expect(parseTask(USER_NOTE, PATH)).toMatchObject({ id: ID, status: "pendente", created: "2026-09-25T15:00:00-03:00" });
   });
+});
+
 });

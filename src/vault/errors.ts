@@ -30,3 +30,17 @@ export class VaultUnavailable extends Error {
     this.name = "VaultUnavailable";
   }
 }
+
+/**
+ * Resposta inesperada e NÃO transitória da API do Vault (token inválido, sem permissão,
+ * repositório ou branch inexistente, erro de validação). Reenviar não adianta.
+ */
+export class VaultApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(`Vault API ${status}: ${message}`);
+    this.name = "VaultApiError";
+  }
+}

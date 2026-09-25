@@ -169,11 +169,13 @@ Repositórios de domínio (metas, tarefas, ...) usam VaultStore,
 aplicam assertHermesPath, parse/validação de frontmatter e a lógica da seção 7.
 ```
 
-Erros tipados: `VaultConflict`, `VaultInvalidNote`, `VaultPathViolation`, `VaultUnavailable` (5xx, rate limit, rede). Só `VaultUnavailable` deve virar 500 no webhook (o Telegram reenvia; seguro porque tudo é idempotente). Os demais viram resposta ao usuário com HTTP 200.
+Erros tipados: `VaultConflict`, `VaultInvalidNote`, `VaultPathViolation`, `VaultUnavailable` (429, 5xx, rate limit, rede) e `VaultApiError` (resposta não transitória: token inválido, sem permissão, repo ou branch inexistente, validação). Só `VaultUnavailable` deve virar 500 no webhook (o Telegram reenvia; seguro porque tudo é idempotente). Os demais viram resposta ao usuário com HTTP 200.
 
-Commits: um por operação que altera algo, mensagem `hermes: <verbo> <tipo> <id>` (ex.: `hermes: create tarefa 2026-09-25-estudar-system-design`), no branch configurado.
+Tradução do `GitHubVaultStore` (nada da API vaza para o domínio): 404 de arquivo vira `null` ou lista vazia (confirmando uma vez que o branch é acessível, porque 404 também significa repo/branch/permissão errados); 422 com "sha" ao criar vira `exists`; 409 (ou 422 com "sha") ao atualizar vira `conflict`; 409 ao criar (corrida de branch com outro escritor) refaz até 3 vezes, depois `VaultUnavailable`; 429, 5xx, rate limit e falha de rede viram `VaultUnavailable`; o resto vira `VaultApiError`. Conteúdo que não seja UTF-8 válido é recusado (`VaultInvalidNote`) em vez de decodificado com perda, porque reescrever corromperia o corpo; arquivos acima de 1 MB e listagens com 1000+ itens (truncadas pela API) também falham alto.
 
-Configuração (SSM, mesma abordagem do Telegram): token do GitHub (`/hermes/prod/github/token`, PAT fine-grained, um repositório, apenas *Contents: read and write*), e nomes de `owner/repo` e branch.
+Commits: um por operação que altera algo, no branch configurado. O store não conhece tipos de nota, então a mensagem é derivada do caminho: `hermes: create <caminho>` ou `hermes: update <caminho>` (ex.: `hermes: create Hermes/tarefas/2026-09-25-estudar-system-design.md`).
+
+Configuração: `owner/repo` e branch não são segredo (env vars `VAULT_REPO=owner/repo` e `VAULT_BRANCH`); o token do GitHub (PAT fine-grained, um repositório, apenas *Contents: read and write*) fica no SSM SecureString, e a Lambda recebe só o nome do parâmetro (`VAULT_GITHUB_TOKEN_PARAM`, ex.: `/hermes/prod/github/token`). O token nunca aparece em mensagens de erro.
 
 ## 11. Testes previstos (sem GitHub real)
 

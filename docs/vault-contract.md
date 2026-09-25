@@ -1,10 +1,12 @@
 # Contrato Hermes ↔ Vault
 
-Status: **proposta, aguardando aprovação**. Nenhum código de Vault deve ser escrito antes de este contrato ser aprovado.
+Status: **aprovado para implementação** (decisões D1 a D6 fechadas na seção 12). Implementação em andamento: `VaultStore`, `InMemoryVaultStore`, guarda de caminhos e slug. O `GitHubVaultStore` vem depois, por cima da mesma interface.
 
 Este documento define o que o Hermes pode fazer no Vault e como. O código de acesso ao GitHub é só a implementação deste contrato; as regras de negócio (metas, tarefas, check-ins) dependem dele, não o contrário.
 
 ## 1. Princípios
+
+0. **REGRA INEGOCIÁVEL: o corpo Markdown de uma nota pertence ao usuário.** O Hermes não pode reconstruí-lo, reformatá-lo, normalizá-lo nem sobrescrevê-lo depois da criação. O Hermes só pode alterar os campos de frontmatter que ele possui. Qualquer operação que precise do corpo diferente do que está no Vault está fora do contrato.
 
 1. **O Vault guarda eventos e estado; o relógio define "agora".** Datas lidas de notas são dados a comparar com `today(clock)`, nunca definem "hoje".
 2. **Toda operação é idempotente.** Ou é *criar-se-não-existir*, ou é *definir valor* (set). Nunca *append cego*. Isso torna seguro o reenvio do Telegram (o webhook responde 500 em falha transitória e o Telegram reenvia o mesmo update).
@@ -40,9 +42,9 @@ O nome do arquivo é o ID mais `.md`. O caminho é **calculável a partir do ID*
 | Check-in | data + tipo, já no caminho | `checkins/2026/2026-09-25-checkin.md` |
 | Revisão | semana ISO | `revisoes/2026-W39.md` |
 
-Consequência assumida: **mesmo título no mesmo dia é a mesma tarefa.** Um segundo `/tarefa` idêntico não cria duplicata, responde "já existe". Para uma tarefa distinta, o título deve diferir.
+Consequência assumida (D2, aprovada): **mesmo título no mesmo dia é a mesma tarefa.** Um segundo `/tarefa` idêntico não cria duplicata, responde "já existe". O `update_id` **não** entra no ID. Para uma tarefa distinta, o título deve diferir; se um dia for preciso ter duas iguais no mesmo dia, isso será um mecanismo explícito novo.
 
-### Data usada no ID (decisão D1)
+### Data usada no ID (decisão D1, aprovada)
 
 A data do ID vem do **instante do evento do Telegram** (`message.date`), convertido para `LocalDate` pelo módulo de tempo, e não de `clock.now()` no momento do processamento. Motivo: se o Telegram reenviar o update depois da meia-noite, o ID continua o mesmo e a criação continua idempotente. Requer uma função nova em `src/time/` (instante em epoch seconds → `LocalDate` de SP). A regra "só `src/time/` decide datas" continua valendo.
 
@@ -91,7 +93,7 @@ O vínculo com a meta fica no campo `meta` (dado para o Hermes). O corpo pode te
 
 - **Hermes cria** o arquivo, com frontmatter completo e um corpo inicial mínimo (`# <título>`).
 - **Hermes atualiza só campos de frontmatter que ele possui** (`status`, `done_at`, `due`, `meta`, `answered_at`). Nunca reescreve o corpo.
-- **Você pode editar o corpo livremente** e também os campos, inclusive `status` à mão.
+- **O corpo é seu** (ver princípio 0): você pode editá-lo livremente e também os campos, inclusive `status` à mão.
 - Na reescrita, o Hermes **preserva** o corpo byte a byte, as chaves desconhecidas do frontmatter e (na medida do possível) a ordem e os comentários do YAML. Isso exige edição por documento YAML (`yaml` com `Document`), não `parse` e `stringify` do objeto.
 - Se o frontmatter não for parseável ou `schema` for desconhecido, o Hermes **recusa escrever** e avisa. Não "conserta" a nota.
 
@@ -136,12 +138,14 @@ Sincronização no lado do Obsidian (obsidian-git ou similar): o Hermes commita 
 
 ## 9. Guarda de caminhos
 
-Uma única função `assertHermesPath(path)` é chamada por **toda** leitura e escrita. Ela rejeita, antes de qualquer chamada de rede:
+Uma única função `assertHermesPath(path)` é chamada por **toda** leitura e escrita, e não pelo chamador: um decorator (`guardVaultStore`) envolve qualquer `VaultStore` e aplica a guarda antes de qualquer I/O. O domínio nunca recebe um store sem guarda. `list` usa `assertHermesDir` e também valida os caminhos que o store devolve. A guarda é uma **lista de permissão** (só passa o que casa com a gramática abaixo), portanto rejeita, antes de qualquer chamada de rede:
 
 - caminhos que não comecem com `Hermes/metas/`, `Hermes/tarefas/`, `Hermes/checkins/` ou `Hermes/revisoes/`;
 - `..`, `.`, segmentos vazios, `\`, caminho absoluto, bytes de controle;
 - extensão diferente de `.md`;
-- IDs que não passem na validação de slug/formato.
+- IDs que não passem na validação de slug/formato;
+- qualquer caractere fora de ASCII imprimível sem espaço (unicode, controle, NUL, `\`);
+- gramática exata por pasta: `metas/<slug>.md`, `tarefas/<AAAA-MM-DD>-<slug>.md` (data real), `checkins/<AAAA>/<AAAA-MM-DD>-<checkin|metrics>.md` (ano da pasta igual ao da data), `revisoes/<AAAA>-W<01..53>.md`.
 
 O PAT do GitHub não restringe por pasta (só por repositório), então **esta guarda é a única barreira** entre o Hermes e o resto do Vault. Ela precisa ter testes próprios e agressivos (path traversal, unicode, `Hermes/../pessoal/x.md`, etc.).
 
@@ -153,8 +157,8 @@ O domínio nunca fala com o GitHub direto:
 VaultStore (I/O bruto, mockável)
   read(path)                  -> { content, sha } | null
   create(path, content)       -> "created" | "exists"
-  update(path, sha, content)  -> "ok" | "conflict"
-  list(dir)                   -> string[]
+  update(path, sha, content)  -> "ok" | "conflict"   (conflict = sha desatualizado OU arquivo sumiu)
+  list(dir)                   -> string[]            (.md diretamente em dir, não recursivo)
 
 Repositórios de domínio (metas, tarefas, ...) usam VaultStore,
 aplicam assertHermesPath, parse/validação de frontmatter e a lógica da seção 7.
@@ -177,11 +181,12 @@ Configuração (SSM, mesma abordagem do Telegram): token do GitHub (`/hermes/pro
 - Notas inválidas nas listagens.
 - IDs de tarefa em torno de meia-noite: update do Telegram com `message.date` às 23:59 e reenvio às 00:01 gera o mesmo ID.
 
-## 12. Decisões abertas
+## 12. Decisões
 
-- **D1.** Data do ID de tarefa vem de `message.date` (recomendado) ou de `clock.now()`? (Seção 3.)
-- **D2.** Aceitar que "mesmo título no mesmo dia = mesma tarefa"? Alternativa: sufixo de `update_id`, que deixa de deduplicar entre mensagens diferentes.
-- **D3.** Custo de listagem: começar sem índice e sem arquivamento, e reavaliar quando `Hermes/tarefas/` passar de ~100 notas (arquivar tarefas antigas por ano é a saída provável; índice em arquivo está descartado).
-- **D4.** Commit direto no branch principal (recomendado, simples) ou branch dedicado do Hermes com merge posterior?
-- **D5.** Enums em português (`pendente`, `feita`) como proposto, ou inglês?
-- **D6.** Repositório do Vault: já existe e é privado? Confirmar nome, branch e se o obsidian-git está em uso.
+- **D1. Aprovada:** a data do ID de tarefa vem de `message.date` (evento original), nunca de `clock.now()`. Falta implementar a função em `src/time/` (epoch seconds para `LocalDate`); será feita junto com o repositório de tarefas.
+- **D2. Aprovada:** mesmo título no mesmo dia é a mesma tarefa. `update_id` fora do ID.
+- **D3. Aprovada:** sem índice e sem arquivamento. ~100 tarefas não é limite técnico, só um ponto possível de revisão; a decisão será por medição, quando `/hoje` ou `/semana` ficarem lentos de verdade.
+- **D4. Aprovada:** commit direto no branch principal. A proteção real é `assertHermesPath`.
+- **D5. Aprovada:** enums em português (`pendente`, `feita`, `cancelada`, `ativa`, `concluida`, `pausada`).
+- **D6. Adiada:** repositório, branch e PAT só serão necessários para o `GitHubVaultStore`. Primeiro `VaultStore` + `InMemoryVaultStore` + guarda.
+- **Em aberto (pequeno):** nomes das chaves de frontmatter em português ou inglês (`created` vs `criada_em`). O contrato usa inglês; decidir antes do repositório de tarefas.

@@ -55,10 +55,14 @@ Campos comuns:
 | Campo | Tipo | Observação |
 |---|---|---|
 | `schema` | inteiro | versão do formato, começa em `1` |
+| `title` | string | título original (o `id` usa o slug dele) |
 | `id` | string | igual ao nome do arquivo sem `.md` |
 | `type` | `meta`, `tarefa`, `checkin`, `revisao` | |
 | `status` | enum por tipo | ver abaixo |
-| `created` | instante ISO 8601 com offset | ex.: `2026-09-25T14:30:00-03:00` |
+| `created` | instante ISO 8601 com offset | ex.: `2026-09-25T14:30:00-03:00`. Vem do instante do **evento**. Nunca é alterado depois da criação |
+| `updated` | instante ISO 8601 com offset | pertence ao Hermes; muda quando o Hermes altera um campo que possui. Definido igual a `created` na criação. Pode faltar em notas escritas à mão |
+
+**Nomenclatura (decidida):** chaves em inglês, valores de enums em português.
 
 Campos por tipo:
 
@@ -94,7 +98,8 @@ O vínculo com a meta fica no campo `meta` (dado para o Hermes). O corpo pode te
 - **Hermes cria** o arquivo, com frontmatter completo e um corpo inicial mínimo (`# <título>`).
 - **Hermes atualiza só campos de frontmatter que ele possui** (`status`, `done_at`, `due`, `meta`, `answered_at`). Nunca reescreve o corpo.
 - **O corpo é seu** (ver princípio 0): você pode editá-lo livremente e também os campos, inclusive `status` à mão.
-- Na reescrita, o Hermes **preserva** o corpo byte a byte, as chaves desconhecidas do frontmatter e (na medida do possível) a ordem e os comentários do YAML. Isso exige edição por documento YAML (`yaml` com `Document`), não `parse` e `stringify` do objeto.
+- Na reescrita, o Hermes **preserva** o corpo byte a byte e o frontmatter do usuário: chaves desconhecidas, ordem, comentários, linhas em branco, estilo de aspas e de coleções, e o fim de linha (LF ou CRLF). Como uma biblioteca YAML reserializando o documento normaliza espaços e linhas em branco, a alteração é **cirúrgica, em texto**: só a linha do campo alterado muda (mantendo comentário da linha e estilo de aspas), ou uma linha nova é acrescentada no fim do frontmatter. Depois de cada alteração o texto é relido como YAML e conferido: se qualquer outra chave mudou, ou o campo não ficou com o valor pedido, a alteração é recusada.
+- Um campo do Hermes escrito num formato que não seja escalar simples de uma linha (bloco `|`, coleção, âncora, valor na linha seguinte, chave entre aspas) faz o Hermes **recusar** a operação com `VaultInvalidNote`, sem mexer no arquivo.
 - Se o frontmatter não for parseável ou `schema` for desconhecido, o Hermes **recusa escrever** e avisa. Não "conserta" a nota.
 
 ## 6. Operações e idempotência

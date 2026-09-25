@@ -144,3 +144,37 @@ export function localDateOfInstant(iso: string): LocalDate {
   if (!dt.isValid) throw new Error(`Instante inválido: ${iso}`);
   return dt.toISODate() as LocalDate;
 }
+
+// ---------- Tempo do evento (epoch do Telegram) ----------
+//
+// Distinção deliberada:
+//   tempo do evento  = quando a mensagem foi enviada (message.date), vem de fora
+//   tempo atual      = Clock (agora)
+//   data civil       = LocalDate
+// As funções abaixo são do primeiro grupo: NÃO recebem nem consultam o Clock.
+// Um reenvio do mesmo update, horas depois, produz exatamente o mesmo resultado.
+
+const MAX_EPOCH_SECONDS = 4_102_444_800; // 2100-01-01T00:00:00Z
+
+function dateTimeOfEpochSeconds(epochSeconds: number): DateTime {
+  if (!Number.isSafeInteger(epochSeconds) || epochSeconds < 0 || epochSeconds > MAX_EPOCH_SECONDS) {
+    throw new Error(`Epoch em segundos inválido: ${epochSeconds}`);
+  }
+  return DateTime.fromSeconds(epochSeconds, { zone: TIMEZONE });
+}
+
+/** Data civil (America/Sao_Paulo) de um instante dado em epoch seconds. */
+export function localDateOfEpochSeconds(epochSeconds: number): LocalDate {
+  return dateTimeOfEpochSeconds(epochSeconds).toISODate() as LocalDate;
+}
+
+/** Instante ISO 8601 com offset de America/Sao_Paulo, dado em epoch seconds. */
+export function instantIsoOfEpochSeconds(epochSeconds: number): string {
+  return dateTimeOfEpochSeconds(epochSeconds).toISO({ suppressMilliseconds: true })!;
+}
+
+/** Valida um instante ISO 8601 com offset explícito e o devolve inalterado. */
+export function parseInstantIso(iso: string): string {
+  localDateOfInstant(iso); // lança se inválido ou sem offset
+  return iso;
+}

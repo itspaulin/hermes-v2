@@ -20,7 +20,9 @@ src/
   handler.ts     entrypoint da Lambda (webhook do Telegram)
   telegram/      client (mockável), router (puro), webhook (secret, allowlist), config
   config.ts      horários de check-in/métricas/revisão (editar aqui)
-  time/          ÚNICO módulo que sabe "agora", "hoje", "amanhã", semana
+  time/          ÚNICO módulo que sabe "agora", "hoje", "amanhã", semana e tempo de evento
+  vault/         VaultStore, InMemoryVaultStore, guarda de caminhos, frontmatter cirúrgico, slug
+  domain/        tarefas (TaskRepository) sobre VaultStore; não conhece Telegram nem GitHub
 test/
 template.yaml    SAM: 1 Lambda + HTTP API
 docs/

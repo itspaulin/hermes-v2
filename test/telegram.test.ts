@@ -242,6 +242,14 @@ describe("createSsmReader", () => {
     expect(cmd.input).toEqual({ Name: "/p/x", WithDecryption: true });
   });
 
+  it("erro do SDK: cita o nome do parâmetro e o tipo do erro (ParameterNotFound), não a mensagem opaca", async () => {
+    const send = vi.fn(async (_cmd: unknown) => {
+      throw Object.assign(new Error("UnknownError"), { name: "ParameterNotFound" });
+    });
+    const err = await createSsmReader({ send } as never).get("/p/x").catch((e) => e);
+    expect(err.message).toBe("Falha ao ler o parâmetro SSM /p/x: ParameterNotFound");
+  });
+
   it("valor vazio: erro só com o nome", async () => {
     const send = vi.fn(async () => ({ Parameter: { Value: "" } }));
     await expect(createSsmReader({ send } as never).get("/p/x")).rejects.toThrow("/p/x");

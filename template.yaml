@@ -28,6 +28,11 @@ Parameters:
     Description: Nome (não o valor) do parâmetro SecureString com o PAT fine-grained do Vault
 
 Resources:
+  HermesLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
   HermesFunction:
     Type: AWS::Serverless::Function
     Metadata:
@@ -41,6 +46,8 @@ Resources:
     Properties:
       Handler: handler.handler
       CodeUri: .
+      LoggingConfig:
+        LogGroup: !Ref HermesLogGroup
       Environment:
         Variables:
           TELEGRAM_BOT_TOKEN_PARAM: !Sub "${SsmPrefix}/bot-token"

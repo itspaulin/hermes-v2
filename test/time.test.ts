@@ -50,6 +50,12 @@ describe("hoje/amanhã em America/Sao_Paulo", () => {
     expect(nowIso(fakeClock("2026-09-25T17:30:00Z"))).toBe("2026-09-25T14:30:00-03:00");
   });
 
+  it("nowIso sempre com precisão de segundos, mesmo com milissegundos no relógio", () => {
+    expect(nowIso(fakeClock("2026-09-25T17:30:00.430Z"))).toBe("2026-09-25T14:30:00-03:00");
+    expect(nowIso(fakeClock("2026-09-25T17:30:59.999Z"))).toBe("2026-09-25T14:30:59-03:00");
+    expect(nowIso(fakeClock("2026-09-25T17:30:00.000Z"))).toBe("2026-09-25T14:30:00-03:00");
+  });
+
   it("relógio avança", () => {
     const c = fakeClock("2026-09-25T02:59:00Z");
     expect(today(c)).toBe("2026-09-24");

@@ -223,6 +223,15 @@ describe("complete / cancel", () => {
     );
   });
 
+  it("updated e done_at têm o mesmo formato de created (sem milissegundos) com relógio real", async () => {
+    const { repo } = setup("2026-09-25T18:10:00.430Z");
+    await repo.create({ title: "Estudar system design", eventEpochSeconds: EVENT });
+    const { task } = await repo.complete(ID);
+    expect(task.updated).toBe("2026-09-25T15:10:00-03:00");
+    expect(task.doneAt).toBe("2026-09-25T15:10:00-03:00");
+    expect(task.created).toBe("2026-09-25T15:00:00-03:00");
+  });
+
   it("created nunca muda", async () => {
     const { repo, clock } = setup();
     await repo.create({ title: "Estudar system design", eventEpochSeconds: EVENT });

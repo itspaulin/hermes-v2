@@ -47,9 +47,13 @@ function nowInZone(clock: Clock): DateTime {
   return dt;
 }
 
-/** Instante atual como ISO 8601 com offset de America/Sao_Paulo. */
+/**
+ * Instante atual como ISO 8601 com offset de America/Sao_Paulo, sempre com precisão de
+ * segundos. (`suppressMilliseconds` do luxon só omite quando os ms são 0; por isso o
+ * truncamento explícito, senão `updated`/`done_at` saíam com ".430" e `created` sem.)
+ */
 export function nowIso(clock: Clock): string {
-  return nowInZone(clock).toISO({ suppressMilliseconds: true })!;
+  return nowInZone(clock).set({ millisecond: 0 }).toISO({ suppressMilliseconds: true })!;
 }
 
 /** Data de hoje em America/Sao_Paulo. */

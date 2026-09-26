@@ -27,3 +27,14 @@ export const SCHEDULES: readonly ScheduleEntry[] = [
   at(5, "14:00", "checkin"),
   at(6, "18:00", "weekly_review"),
 ];
+
+/**
+ * Como o Hermes avalia a semana (taxa = tarefas com prazo na semana que foram concluídas).
+ * Alterar o rigor = editar aqui. Abaixo de `reasonable` a semana é "abaixo do planejado".
+ */
+export const PRODUCTIVITY = {
+  /** Taxa mínima para "produtiva". */
+  productive: 0.8,
+  /** Taxa mínima para "razoável". */
+  reasonable: 0.5,
+} as const;

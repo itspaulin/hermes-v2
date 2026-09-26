@@ -5,7 +5,7 @@ import { dayContext, weekStats } from "../domain/stats.js";
 import type { TaskRepository } from "../domain/task-repository.js";
 import { SCHEDULES, type ScheduleKind } from "../config.js";
 import type { TelegramClient } from "../telegram/client.js";
-import { currentWeek, isoWeekLabel, today, weekdayOf, type Clock } from "../time/index.js";
+import { addDays, currentWeek, isoWeekLabel, today, weekdayOf, weekOf, type Clock } from "../time/index.js";
 import {
   checkinBody,
   checkinMessage,
@@ -74,9 +74,10 @@ export async function runScheduled(ev: ScheduledEvent, deps: ScheduleDeps): Prom
       const week = currentWeek(clock);
       const [{ tasks: all }, { metas: allMetas }] = await Promise.all([tasks.listAll(), metas.list()]);
       const stats = weekStats(all, allMetas, week, date);
-      const { checkin } = await checkins.open({ kind: "metrics", date, body: metricsBody(stats, week) });
+      const previousDone = weekStats(all, allMetas, weekOf(addDays(week.start, -7)), date).done;
+      const { checkin } = await checkins.open({ kind: "metrics", date, body: metricsBody(stats, week, previousDone) });
       if (checkin.answer !== undefined) return `métricas ${checkin.id} já respondidas`;
-      await send(metricsMessage(stats, week));
+      await send(metricsMessage(stats, week, previousDone));
       return `métricas ${checkin.id} enviadas`;
     }
     case "weekly_review": {
@@ -87,14 +88,15 @@ export async function runScheduled(ev: ScheduledEvent, deps: ScheduleDeps): Prom
         checkins.listBetween(week.start, week.end),
       ]);
       const stats = weekStats(all, allMetas, week, date);
+      const previousDone = weekStats(all, allMetas, weekOf(addDays(week.start, -7)), date).done;
       const id = isoWeekLabel(week.start);
       const summary: CheckinSummary = {
         daily: weekCheckins.filter((c) => c.kind === "checkin"),
         metrics: weekCheckins.find((c) => c.kind === "metrics") ?? null,
       };
-      const { review } = await reviews.open({ weekStart: week.start, body: reviewBody(stats, week, id, summary) });
+      const { review } = await reviews.open({ weekStart: week.start, body: reviewBody(stats, week, id, summary, previousDone) });
       if (review.answer !== undefined) return `revisão ${review.id} já respondida`;
-      await send(reviewMessage(stats, week, id, summary));
+      await send(reviewMessage(stats, week, id, summary, previousDone));
       return `revisão ${review.id} enviada`;
     }
   }

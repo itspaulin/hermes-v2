@@ -1,3 +1,4 @@
+import { PRODUCTIVITY } from "../config.js";
 import { addDays, localDateOfInstant, type LocalDate, type Week } from "../time/index.js";
 import type { Meta } from "./meta.js";
 import type { Task } from "./task.js";
@@ -37,6 +38,10 @@ export interface WeekStats {
   pending: number;
   /** Pendentes com prazo anterior a hoje. */
   overdue: number;
+  /** Tarefas com prazo dentro da semana, exceto as canceladas: o que estava planejado. */
+  planned: number;
+  /** Dessas, quantas estão feitas. */
+  plannedDone: number;
   /** Concluídas por dia, segunda a domingo, na ordem de `week.days`. */
   doneByDay: number[];
   /** Metas ativas (e as que tiveram conclusão na semana), com tarefas concluídas na semana e pendentes. */
@@ -52,6 +57,7 @@ const within = (d: LocalDate | undefined, week: Week): boolean => d !== undefine
 export function weekStats(tasks: readonly Task[], metas: readonly Meta[], week: Week, today: LocalDate): WeekStats {
   const doneInWeek = tasks.filter((t) => t.status === "feita" && within(dateOf(t.doneAt), week));
   const pending = tasks.filter((t) => t.status === "pendente");
+  const planned = tasks.filter((t) => t.status !== "cancelada" && within(t.due, week));
 
   const byMeta: MetaWeekStats[] = [];
   for (const m of metas) {
@@ -66,7 +72,51 @@ export function weekStats(tasks: readonly Task[], metas: readonly Meta[], week: 
     cancelled: tasks.filter((t) => t.status === "cancelada" && within(dateOf(t.updated), week)).length,
     pending: pending.length,
     overdue: pending.filter((t) => t.due !== undefined && t.due < today).length,
+    planned: planned.length,
+    plannedDone: planned.filter((t) => t.status === "feita").length,
     doneByDay: week.days.map((day) => doneInWeek.filter((t) => dateOf(t.doneAt) === day).length),
     byMeta,
   };
+}
+
+export type ProductivityLevel = "produtiva" | "razoavel" | "abaixo" | "sem_prazos" | "sem_atividade";
+
+export interface Assessment {
+  level: ProductivityLevel;
+  /** plannedDone / planned, ou null se nada tinha prazo na semana. */
+  rate: number | null;
+  /** Uma linha pronta para mostrar. */
+  text: string;
+}
+
+const pct = (r: number): string => `${Math.round(r * 100)}%`;
+const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * A avaliação da semana, por regra (sem IA): taxa de conclusão do que tinha prazo na semana,
+ * comparada aos limites de PRODUCTIVITY. Sem nada com prazo, não há o que medir: só conta o feito.
+ * Deve ser lida como fato calculado, não como julgamento de valor.
+ */
+export function assess(s: WeekStats): Assessment {
+  if (s.planned === 0) {
+    return s.done === 0
+      ? { level: "sem_atividade", rate: null, text: "Sem atividade registrada na semana." }
+      : {
+          level: "sem_prazos",
+          rate: null,
+          text: `Nenhuma tarefa tinha prazo na semana, então não há taxa para medir. ${plural(s.done, "tarefa concluída", "tarefas concluídas")}.`,
+        };
+  }
+  const rate = s.plannedDone / s.planned;
+  const detail = `${s.plannedDone} de ${plural(s.planned, "tarefa planejada concluída", "tarefas planejadas concluídas")} (${pct(rate)})`;
+  if (rate >= PRODUCTIVITY.productive) return { level: "produtiva", rate, text: `Semana produtiva: ${detail}.` };
+  if (rate >= PRODUCTIVITY.reasonable) return { level: "razoavel", rate, text: `Semana razoável: ${detail}.` };
+  return { level: "abaixo", rate, text: `Semana abaixo do planejado: ${detail}.` };
+}
+
+/** "8 concluídas, contra 5 na semana anterior (+3)." */
+export function compareDone(done: number, previousDone: number): string {
+  const diff = done - previousDone;
+  const sign = diff > 0 ? `+${diff}` : diff < 0 ? `${diff}` : "igual";
+  return `${done} concluídas, contra ${previousDone} na semana anterior (${sign}).`;
 }

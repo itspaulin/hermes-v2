@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SCHEDULES } from "../src/config.js";
-import { dayContext, weekStats } from "../src/domain/stats.js";
+import { assess, compareDone, dayContext, weekStats, type WeekStats } from "../src/domain/stats.js";
 import { parseTask } from "../src/domain/task.js";
 import { parseScheduledEvent, runScheduled, type ScheduledEvent } from "../src/schedule/run.js";
 import { routeMessage } from "../src/telegram/router.js";
@@ -220,6 +220,8 @@ describe("estatísticas", () => {
       cancelled: 1,
       pending: 2,
       overdue: 1,
+      planned: 1, // só A tinha prazo dentro da semana (D é da semana que vem; B, C, E sem prazo)
+      plannedDone: 0,
       doneByDay: [0, 1, 0, 1, 0, 0, 0],
       byMeta: [{ id: "melhorar-linkedin", title: "Melhorar LinkedIn", done: 1, pending: 0 }],
     });
@@ -248,6 +250,9 @@ describe("métricas (qui 14h) e /metrica", () => {
     expect(text).toContain("• Atrasadas: 1");
     expect(text).toContain("Concluídas por dia: seg 0, ter 1, qua 0, qui 1, sex 0, sáb 0, dom 0");
     expect(text).toContain("• Melhorar LinkedIn: 1 concluídas na semana, 0 pendentes");
+    expect(text).toContain("Andamento: 0 de 1 tarefa com prazo na semana concluída (0%)");
+    expect(text).toContain("Comparação: 2 concluídas, contra 0 na semana anterior (+2).");
+    expect(text).toContain("Opcional, para o que só você sabe");
     expect(text).toContain("/metrica 6h estudo, 7 candidaturas");
 
     expect(await t.say("/metrica 6h estudo, 7 candidaturas, 12 comentários")).toBe("Métricas de 24/09 registrado.");
@@ -279,6 +284,7 @@ describe("revisão semanal (sáb 18h) e /revisao", () => {
     const note = (await t.mem.read("Hermes/revisoes/2026-W39.md"))!.content;
     expect(note).toContain("type: revisao\nweek: 2026-W39\nweek_start: 2026-09-21");
     expect(note).toContain("21/09 a 27/09");
+    expect(note).toContain("## Avaliação\n\nSemana abaixo do planejado: 0 de 1 tarefa planejada concluída (0%).\nComparação: 2 concluídas, contra 0 na semana anterior (+2).");
     expect(note).toContain("- Concluídas: 2");
     expect(note).toContain("2 registrados, 1 sem resposta.\n- 21/09: segunda ok");
     expect(note).toContain("## Métricas manuais\n\n6h estudo");
@@ -287,11 +293,13 @@ describe("revisão semanal (sáb 18h) e /revisao", () => {
       [
         "Revisão semanal 2026-W39 (21/09 a 27/09)",
         "",
+        "Semana abaixo do planejado: 0 de 1 tarefa planejada concluída (0%).",
+        "Comparação: 2 concluídas, contra 0 na semana anterior (+2).",
+        "",
         "2 concluídas, 1 canceladas, 2 pendentes e 1 atrasadas.",
         "Check-ins: 1 de 2 respondidos.",
         "",
-        "A semana foi encerrada. O que você quer registrar sobre ela?",
-        "Responda com /revisao <texto>.",
+        "A revisão completa está no Obsidian. Se quiser somar uma nota sua: /revisao <texto>",
       ].join("\n"),
     );
 
@@ -316,5 +324,47 @@ describe("revisão semanal (sáb 18h) e /revisao", () => {
   it("sem revisão nenhuma", async () => {
     const t = setup();
     expect(await t.say("/revisao x")).toBe("Nenhuma revisão aguardando resposta.");
+  });
+});
+
+describe("avaliação da semana (por regra, sem IA)", () => {
+  const stats = (o: Partial<WeekStats>): WeekStats => ({
+    created: 0, done: 0, cancelled: 0, pending: 0, overdue: 0, planned: 0, plannedDone: 0, doneByDay: [0, 0, 0, 0, 0, 0, 0], byMeta: [], ...o,
+  });
+
+  it("limites de PRODUCTIVITY: 80% produtiva, 50% razoável, abaixo disso abaixo do planejado", () => {
+    const at = (planned: number, plannedDone: number) => assess(stats({ planned, plannedDone, done: plannedDone }));
+    expect(at(10, 10)).toMatchObject({ level: "produtiva", rate: 1 });
+    expect(at(10, 8)).toMatchObject({ level: "produtiva", text: "Semana produtiva: 8 de 10 tarefas planejadas concluídas (80%)." });
+    expect(at(10, 7).level).toBe("razoavel");
+    expect(at(10, 5).text).toBe("Semana razoável: 5 de 10 tarefas planejadas concluídas (50%).");
+    expect(at(10, 4).level).toBe("abaixo");
+    expect(at(2, 0).text).toBe("Semana abaixo do planejado: 0 de 2 tarefas planejadas concluídas (0%).");
+    expect(at(1, 1).text).toBe("Semana produtiva: 1 de 1 tarefa planejada concluída (100%).");
+  });
+
+  it("sem nada com prazo não inventa taxa: só conta o que foi feito", () => {
+    expect(assess(stats({ done: 3 }))).toEqual({
+      level: "sem_prazos",
+      rate: null,
+      text: "Nenhuma tarefa tinha prazo na semana, então não há taxa para medir. 3 tarefas concluídas.",
+    });
+    expect(assess(stats({ done: 1 })).text).toContain("1 tarefa concluída.");
+    expect(assess(stats({}))).toEqual({ level: "sem_atividade", rate: null, text: "Sem atividade registrada na semana." });
+  });
+
+  it("compareDone", () => {
+    expect(compareDone(8, 5)).toBe("8 concluídas, contra 5 na semana anterior (+3).");
+    expect(compareDone(2, 6)).toBe("2 concluídas, contra 6 na semana anterior (-4).");
+    expect(compareDone(4, 4)).toBe("4 concluídas, contra 4 na semana anterior (igual).");
+  });
+
+  it("uma semana boa de ponta a ponta: tarefas com prazo na semana concluídas viram 'produtiva' na revisão", async () => {
+    const t = setup("2026-09-26T21:00:00Z");
+    for (const n of ["a", "b", "c", "d", "e"]) await t.task(`tarefa ${n}`, "2026-09-21T15:00:00Z", "2026-09-25");
+    for (const n of ["a", "b", "c", "d"]) await t.repos.tasks.complete(`2026-09-21-tarefa-${n}`);
+    await t.run("weekly_review");
+    expect(t.sent[0]!.text).toContain("Semana produtiva: 4 de 5 tarefas planejadas concluídas (80%).");
+    expect((await t.mem.read("Hermes/revisoes/2026-W39.md"))!.content).toContain("## Avaliação\n\nSemana produtiva: 4 de 5");
   });
 });

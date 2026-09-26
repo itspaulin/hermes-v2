@@ -1,12 +1,12 @@
 import type { Checkin } from "../domain/checkin.js";
-import type { DayContext, WeekStats } from "../domain/stats.js";
-import { UPCOMING_DAYS } from "../domain/stats.js";
+import { assess, compareDone, UPCOMING_DAYS, type DayContext, type WeekStats } from "../domain/stats.js";
 import { weekdayOf, type LocalDate, type Week } from "../time/index.js";
 
 /**
  * Textos dos check-ins agendados. Puro: recebe dados prontos, devolve strings.
  * O `body` vai para a nota do Vault (só na criação); o `message` vai para o Telegram.
- * O Hermes registra fatos; nunca avalia se a semana foi boa ou ruim.
+ * A avaliação da semana é calculada por regra (assess, limites em src/config.ts), sem IA e sem
+ * depender de nada que o usuário precise digitar; /metrica e /revisao são notas opcionais.
  */
 const WEEKDAY_SHORT = ["", "seg", "ter", "qua", "qui", "sex", "sáb", "dom"] as const;
 const br = (d: LocalDate): string => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
@@ -55,7 +55,17 @@ function metaLines(s: WeekStats): string[] {
 
 const period = (week: Week): string => `${br(week.start)} a ${br(week.end)}`;
 
-export function metricsBody(s: WeekStats, week: Week): string {
+/** Quinta-feira a semana ainda não acabou: mostra o andamento, sem veredito. */
+function progressLines(s: WeekStats, previousDone: number): string[] {
+  return [
+    ...(s.planned > 0
+      ? [`Andamento: ${s.plannedDone} de ${s.planned} ${s.planned === 1 ? "tarefa com prazo na semana concluída" : "tarefas com prazo na semana concluídas"} (${Math.round((s.plannedDone / s.planned) * 100)}%)`]
+      : []),
+    `Comparação: ${compareDone(s.done, previousDone)}`,
+  ];
+}
+
+export function metricsBody(s: WeekStats, week: Week, previousDone: number): string {
   const metas = metaLines(s);
   return [
     `# Métricas da semana ${period(week)}`,
@@ -63,22 +73,25 @@ export function metricsBody(s: WeekStats, week: Week): string {
     "## Tarefas",
     "",
     ...statLines(s, week).map((l) => `- ${l}`),
+    "",
+    ...progressLines(s, previousDone),
     ...(metas.length ? ["", "## Metas", "", ...metas.map((l) => `- ${l}`)] : []),
     "",
-    "Métricas manuais (horas de estudo, candidaturas...): campo `answer` acima (Telegram: /metrica).",
+    "Opcional: números que só você sabe (horas de estudo, candidaturas...) ficam no campo `answer` acima (Telegram: /metrica).",
   ].join("\n");
 }
 
-export function metricsMessage(s: WeekStats, week: Week): string {
+export function metricsMessage(s: WeekStats, week: Week, previousDone: number): string {
   const metas = metaLines(s);
   return [
     `Métricas da semana (${period(week)})`,
     "",
     ...statLines(s, week).map((l) => `• ${l}`),
+    "",
+    ...progressLines(s, previousDone),
     ...(metas.length ? ["", "Metas:", ...metas.map((l) => `• ${l}`)] : []),
     "",
-    "Se quiser, registre as métricas que só você sabe (horas de estudo, candidaturas, conexões...):",
-    "/metrica 6h estudo, 7 candidaturas",
+    "Opcional, para o que só você sabe (horas de estudo, candidaturas...): /metrica 6h estudo, 7 candidaturas",
   ].join("\n");
 }
 
@@ -88,7 +101,7 @@ export interface CheckinSummary {
   metrics: Checkin | null;
 }
 
-export function reviewBody(s: WeekStats, week: Week, id: string, sum: CheckinSummary): string {
+export function reviewBody(s: WeekStats, week: Week, id: string, sum: CheckinSummary, previousDone: number): string {
   const answered = sum.daily.filter((c) => c.answer !== undefined);
   const metas = metaLines(s);
   return [
@@ -97,6 +110,11 @@ export function reviewBody(s: WeekStats, week: Week, id: string, sum: CheckinSum
     "## Período",
     "",
     period(week),
+    "",
+    "## Avaliação",
+    "",
+    assess(s).text,
+    `Comparação: ${compareDone(s.done, previousDone)}`,
     "",
     "## Tarefas",
     "",
@@ -112,19 +130,21 @@ export function reviewBody(s: WeekStats, week: Week, id: string, sum: CheckinSum
     "",
     sum.metrics?.answer ?? "Sem registro.",
     "",
-    "Sua revisão: campo `answer` acima (Telegram: /revisao). O corpo abaixo é seu.",
+    "Opcional: uma nota sua sobre a semana fica no campo `answer` acima (Telegram: /revisao). O corpo abaixo é seu.",
   ].join("\n");
 }
 
-export function reviewMessage(s: WeekStats, week: Week, id: string, sum: CheckinSummary): string {
+export function reviewMessage(s: WeekStats, week: Week, id: string, sum: CheckinSummary, previousDone: number): string {
   const answered = sum.daily.filter((c) => c.answer !== undefined).length;
   return [
     `Revisão semanal ${id} (${period(week)})`,
     "",
+    assess(s).text,
+    `Comparação: ${compareDone(s.done, previousDone)}`,
+    "",
     `${s.done} concluídas, ${s.cancelled} canceladas, ${s.pending} pendentes e ${s.overdue} atrasadas.`,
     `Check-ins: ${answered} de ${sum.daily.length} respondidos.`,
     "",
-    "A semana foi encerrada. O que você quer registrar sobre ela?",
-    "Responda com /revisao <texto>.",
+    "A revisão completa está no Obsidian. Se quiser somar uma nota sua: /revisao <texto>",
   ].join("\n");
 }

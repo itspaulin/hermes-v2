@@ -78,11 +78,11 @@ Definida em `src/config.ts`; `template.yaml` tem um schedule por entrada (fuso `
 | Quando | O quê | Nota |
 |---|---|---|
 | seg, ter, qua, sex 14h | check-in: contagens (hoje, atrasadas, próximas 7 dias) e a pergunta | `checkins/AAAA/AAAA-MM-DD-checkin.md` |
-| qui 14h | métricas calculadas da semana (criadas, concluídas, canceladas, pendentes, atrasadas, por dia, por meta) | `checkins/AAAA/AAAA-MM-DD-metrics.md` |
-| sáb 18h | revisão: resumo da semana, check-ins e métricas manuais | `revisoes/AAAA-Wxx.md` |
+| qui 14h | métricas calculadas da semana (criadas, concluídas, canceladas, pendentes, atrasadas, por dia, por meta), andamento e comparação com a semana anterior | `checkins/AAAA/AAAA-MM-DD-metrics.md` |
+| sáb 18h | revisão: avaliação da semana (produtiva, razoável ou abaixo do planejado), comparação, resumo, check-ins e métricas manuais | `revisoes/AAAA-Wxx.md` |
 | dom | nada automático | |
 
-O Hermes registra fatos; não julga se a semana foi boa. A resposta vai no campo `answer` do frontmatter (o corpo é seu). Falha no Vault ou no Telegram repete até 2 vezes; como criar é idempotente, a repetição só reenvia a mensagem. Slot já respondido não é reenviado. Teste manual fora do calendário: invocar a Lambda com `{"kind":"checkin","force":true}`.
+**A avaliação da semana é do Hermes, calculada por regra (sem IA), e você não precisa digitar nada.** Taxa = tarefas com prazo na semana (menos as canceladas) que foram concluídas; `produtiva` a partir de 80%, `razoável` a partir de 50%, senão `abaixo do planejado` (limites em `PRODUCTIVITY`, `src/config.ts`). Sem nenhuma tarefa com prazo na semana não há taxa, e o Hermes só conta o que foi concluído. A revisão e as métricas também comparam as concluídas com as da semana anterior. `/checkin`, `/metrica` e `/revisao` são **opcionais**: guardam uma nota sua no campo `answer` do frontmatter (o corpo é seu). Falha no Vault ou no Telegram repete até 2 vezes; como criar é idempotente, a repetição só reenvia a mensagem. Slot já respondido não é reenviado. Teste manual fora do calendário: invocar a Lambda com `{"kind":"checkin","force":true}`.
 
 - O ID da meta é o slug do título (sem data): o mesmo título é a mesma meta. Uma tarefa com meta grava `meta: <id da meta>` no frontmatter e um wikilink `[[meta]]` no corpo.
 - **`/tarefa` sem `#meta` pergunta a meta** (se houver metas ativas): o Hermes responde com a lista numerada e um botão por opção, e a tarefa só é criada na resposta. Responda tocando no botão, ou respondendo (reply do Telegram) à pergunta com o número, `não` ou `nenhuma`. Uma mensagem solta `1` não tem contexto e é ignorada. Sem estado guardado: a pergunta carrega tudo (título, prazo, ID da tarefa e das metas), e a meta é revalidada (existe e está ativa) na hora de gravar. Perguntas valem por 24 h. Duas `/tarefa` seguidas geram duas perguntas independentes; nenhuma sobrescreve a outra.

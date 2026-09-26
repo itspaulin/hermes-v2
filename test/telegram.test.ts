@@ -4,6 +4,7 @@ import { createTelegramClient, TelegramApiError, type TelegramClient } from "../
 import { loadTelegramConfig, telegramParamNamesFromEnv } from "../src/telegram/config.js";
 import { createSsmReader, type ParameterReader } from "../src/ssm.js";
 import { parseCommand, routeMessage } from "../src/telegram/router.js";
+import { MetaRepository } from "../src/domain/meta-repository.js";
 import { TaskRepository } from "../src/domain/task-repository.js";
 import { InMemoryVaultStore } from "../src/vault/memory-store.js";
 import { guardVaultStore } from "../src/vault/store.js";
@@ -15,11 +16,13 @@ const clock = fakeClock("2026-09-25T17:30:00Z"); // 14:30 em SP
 
 function setup(sendMessage: TelegramClient["sendMessage"] = async () => {}) {
   const send = vi.fn(sendMessage);
+  const store = guardVaultStore(new InMemoryVaultStore());
   const handler = createHandler({
     config: { botToken: "tok", webhookSecret: SECRET, allowedChatIds: [ALLOWED] },
     client: { sendMessage: send },
     clock,
-    tasks: new TaskRepository(guardVaultStore(new InMemoryVaultStore()), clock),
+    tasks: new TaskRepository(store, clock),
+    metas: new MetaRepository(store, clock),
   });
   return { send, handler };
 }
@@ -66,7 +69,8 @@ describe("allowlist de chat_id", () => {
 });
 
 describe("comandos", () => {
-  const deps = { clock, tasks: new TaskRepository(guardVaultStore(new InMemoryVaultStore()), clock) };
+  const store = guardVaultStore(new InMemoryVaultStore());
+  const deps = { clock, tasks: new TaskRepository(store, clock), metas: new MetaRepository(store, clock) };
   const route = (text: string) => routeMessage(text, undefined, deps);
 
   it("/start", async () =>
@@ -84,7 +88,7 @@ describe("comandos", () => {
 
   it("comando desconhecido", async () => {
     expect(await route("/foo")).toContain("Comando desconhecido: /foo");
-    expect(await route("/foo")).toContain("/tarefa, /feita, /cancelar, /hoje, /semana, /ping");
+    expect(await route("/foo")).toContain("/tarefa, /feita, /cancelar, /hoje, /semana, /meta, /metas, /metafeita, /metacancelar, /ping");
   });
 
   it("mensagem sem comando", async () => {

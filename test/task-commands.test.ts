@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createHandler } from "../src/handler.js";
+import { MetaRepository } from "../src/domain/meta-repository.js";
 import { TaskRepository } from "../src/domain/task-repository.js";
 import { matchPending } from "../src/domain/task-resolve.js";
 import { parseTask, taskPath, type Task } from "../src/domain/task.js";
@@ -41,6 +42,7 @@ function rig(nowIso = "2026-09-25T18:10:00Z", gh = new FakeGitHub(), store?: Vau
     client: { sendMessage: async (_c, t) => void replies.push(t) },
     clock,
     tasks: new TaskRepository(real, clock),
+    metas: new MetaRepository(real, clock),
   });
   let updateId = 0;
   return {
@@ -330,14 +332,13 @@ describe("8. GitHub indisponível: 500 para o Telegram reenviar", () => {
       new Promise((_res, rej) => init?.signal?.addEventListener("abort", () => rej(new DOMException("aborted", "TimeoutError"))));
     const clock = fakeClock("2026-09-25T18:10:00Z");
     const replies: string[] = [];
+    const hangStore = createGitHubVaultStore({ owner: "o", repo: "r", branch: "main", token: GH_TOKEN }, { fetch: hang, timeoutMs: 20 });
     const handler = createHandler({
       config: { botToken: "tok", webhookSecret: SECRET, allowedChatIds: [CHAT] },
       client: { sendMessage: async (_c, t) => void replies.push(t) },
       clock,
-      tasks: new TaskRepository(
-        createGitHubVaultStore({ owner: "o", repo: "r", branch: "main", token: GH_TOKEN }, { fetch: hang, timeoutMs: 20 }),
-        clock,
-      ),
+      tasks: new TaskRepository(hangStore, clock),
+      metas: new MetaRepository(hangStore, clock),
     });
     const res = (await handler({
       headers: { "x-telegram-bot-api-secret-token": SECRET },
@@ -474,6 +475,7 @@ describe("outros erros do usuário/Vault viram resposta 200", () => {
     const clock = fakeClock("2026-09-25T18:10:00Z");
     let telegramDown = true;
     const replies: string[] = [];
+    const ghStore = createGitHubVaultStore({ owner: gh.owner, repo: gh.repo, branch: gh.branch, token: "t" }, { fetch: gh.fetch });
     const handler = createHandler({
       config: { botToken: "tok", webhookSecret: SECRET, allowedChatIds: [CHAT] },
       client: {
@@ -483,10 +485,8 @@ describe("outros erros do usuário/Vault viram resposta 200", () => {
         },
       },
       clock,
-      tasks: new TaskRepository(
-        createGitHubVaultStore({ owner: gh.owner, repo: gh.repo, branch: gh.branch, token: "t" }, { fetch: gh.fetch }),
-        clock,
-      ),
+      tasks: new TaskRepository(ghStore, clock),
+      metas: new MetaRepository(ghStore, clock),
     });
     const ev = () => ({
       headers: { "x-telegram-bot-api-secret-token": SECRET },

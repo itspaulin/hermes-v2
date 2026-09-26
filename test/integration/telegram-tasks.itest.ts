@@ -12,6 +12,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { MetaRepository } from "../../src/domain/meta-repository.js";
 import { TaskRepository } from "../../src/domain/task-repository.js";
 import { taskPath } from "../../src/domain/task.js";
 import { createHandler } from "../../src/handler.js";
@@ -49,6 +50,7 @@ function bot(store: ReturnType<typeof createGitHubVaultStore>, nowIso = "2020-01
     client: { sendMessage: async (_c, t) => void replies.push(t) },
     clock,
     tasks: new TaskRepository(store, clock),
+    metas: new MetaRepository(store, clock),
   });
   let n = 0;
   return {

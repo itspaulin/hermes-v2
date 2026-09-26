@@ -1,14 +1,17 @@
+import type { MetaRepository } from "../domain/meta-repository.js";
 import type { TaskRepository } from "../domain/task-repository.js";
 import { nowIso, type Clock } from "../time/index.js";
 import { cmdHoje, cmdSemana } from "./list-commands.js";
+import { cmdMeta, cmdMetas, cmdMudarStatusMeta } from "./meta-commands.js";
 import { cmdMudarStatus, cmdTarefa } from "./task-commands.js";
 
 export interface RouterDeps {
   clock: Clock;
   tasks: TaskRepository;
+  metas: MetaRepository;
 }
 
-const COMMANDS_HELP = "Comandos: /tarefa, /feita, /cancelar, /hoje, /semana, /ping";
+const COMMANDS_HELP = "Comandos: /tarefa, /feita, /cancelar, /hoje, /semana, /meta, /metas, /metafeita, /metacancelar, /ping";
 const COMMAND_RE = /^\/([a-zA-Z0-9_]+)(?:@[a-zA-Z0-9_]+)?(?:\s+([\s\S]*))?$/;
 
 /** Comando e argumentos de um texto "/comando args", ou null se não começa com "/comando". */
@@ -29,7 +32,7 @@ export function parseCommand(text: string): string | null {
 export async function routeMessage(
   text: string,
   eventEpochSeconds: number | undefined,
-  { clock, tasks }: RouterDeps,
+  { clock, tasks, metas }: RouterDeps,
 ): Promise<string> {
   const cmd = parseCommandLine(text);
   if (!cmd) return `Envie um comando. ${COMMANDS_HELP}`;
@@ -40,11 +43,19 @@ export async function routeMessage(
     case "ping":
       return `pong ${nowIso(clock)}`;
     case "tarefa":
-      return cmdTarefa(cmd.args, eventEpochSeconds, tasks);
+      return cmdTarefa(cmd.args, eventEpochSeconds, tasks, metas);
     case "feita":
       return cmdMudarStatus("feita", cmd.args, tasks);
     case "cancelar":
       return cmdMudarStatus("cancelada", cmd.args, tasks);
+    case "meta":
+      return cmdMeta(cmd.args, eventEpochSeconds, metas);
+    case "metas":
+      return cmdMetas(metas, tasks);
+    case "metafeita":
+      return cmdMudarStatusMeta("concluida", cmd.args, metas);
+    case "metacancelar":
+      return cmdMudarStatusMeta("cancelada", cmd.args, metas);
     case "hoje":
       return cmdHoje(tasks, clock);
     case "semana":

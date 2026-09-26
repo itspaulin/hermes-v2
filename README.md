@@ -2,7 +2,7 @@
 
 Bot de metas, tarefas, check-ins e acompanhamento. Telegram é a interface, o Obsidian Vault (via GitHub) é a fonte de verdade, AWS executa.
 
-Status: fundação + Telegram (`/start`, `/ping`) + tarefas (`/tarefa`, `/feita`, `/cancelar`) gravadas no Vault via GitHub. Sem `/hoje`, `/semana`, metas, check-ins nem Scheduler ainda. Ainda não implantado na AWS.
+Status: no ar na AWS. Telegram (`/start`, `/ping`), tarefas (`/tarefa`, `/feita`, `/cancelar`), listagens (`/hoje`, `/semana`) e metas (`/meta`, `/metas`, `/metafeita`, `/metacancelar`), gravadas no Vault via GitHub. Check-ins e Scheduler ainda não existem.
 
 ## Arquitetura
 
@@ -56,10 +56,19 @@ Respostas do webhook: 401 secret errado, 400 payload inválido, 200 ignorado/res
 ```
 /tarefa <título>
 /tarefa <título> até AAAA-MM-DD      # só AAAA-MM-DD; datas relativas ("amanhã") são recusadas
+/tarefa <título> [até AAAA-MM-DD] #<id-da-meta>   # vincula à meta; "#meta" só vale como última palavra
 /feita <id-ou-trecho>
 /cancelar <id-ou-trecho>
+/hoje                                # atrasadas, para hoje, sem prazo
+/semana                              # atrasadas e um bloco por dia (segunda a domingo)
+/meta <título> [até AAAA-MM-DD]
+/metas                               # metas ativas com a contagem de tarefas pendentes
+/metafeita <id-ou-trecho>
+/metacancelar <id-ou-trecho>
 /start   /ping
 ```
+
+- O ID da meta é o slug do título (sem data): o mesmo título é a mesma meta. Uma tarefa com `#meta` grava `meta:` no frontmatter e um wikilink `[[meta]]` no corpo; a meta precisa existir, senão a tarefa não é criada.
 
 - O ID da tarefa é `AAAA-MM-DD-<slug do título>`, com a data do **evento** (`message.date` do Telegram), não a do processamento. Mesmo título no mesmo dia é a mesma tarefa: reenviar não duplica.
 - `/feita` e `/cancelar` aceitam o ID completo ou um trecho (normalizado como slug), resolvido **só entre tarefas pendentes**. Um ID completo também acha tarefa já feita (resposta "Já estava feita", sem commit). Zero ou várias correspondências: "Tarefa não encontrada." ou a lista de candidatos, sem alterar nada.
@@ -67,4 +76,4 @@ Respostas do webhook: 401 secret errado, 400 payload inválido, 200 ignorado/res
 
 ## Vault
 
-O Hermes só escreve em `Hermes/{metas,tarefas,checkins,revisoes}` (hoje só `tarefas`). O resto do Vault está fora do escopo. Um commit por operação via GitHub Contents API, direto no branch configurado (`VAULT_REPO`, `VAULT_BRANCH`; o PAT fica no SSM em `VAULT_GITHUB_TOKEN_PARAM`). Contrato completo em `docs/vault-contract.md`.
+O Hermes só escreve em `Hermes/{metas,tarefas,checkins,revisoes}` (hoje `tarefas` e `metas`). O resto do Vault está fora do escopo. Um commit por operação via GitHub Contents API, direto no branch configurado (`VAULT_REPO`, `VAULT_BRANCH`; o PAT fica no SSM em `VAULT_GITHUB_TOKEN_PARAM`). Contrato completo em `docs/vault-contract.md`.

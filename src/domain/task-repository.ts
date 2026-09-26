@@ -105,7 +105,8 @@ export class TaskRepository {
         ...(input.due !== undefined && { due: input.due }),
         ...(input.meta !== undefined && { meta: input.meta }),
       },
-      `\n# ${title}\n`,
+      // Wikilink só para navegação no Obsidian; o Hermes lê o vínculo do frontmatter.
+      `\n# ${title}\n${input.meta !== undefined ? `\nMeta: [[${input.meta}]]\n` : ""}`,
     );
 
     if ((await this.store.create(path, content)) === "created") {

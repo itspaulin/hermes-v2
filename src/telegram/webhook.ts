@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda";
 import type { Clock } from "../time/index.js";
 import { TelegramApiError, type TelegramClient } from "./client.js";
+import { MetaNotFound, MetaValidationError, type MetaRepository } from "../domain/meta-repository.js";
 import { TaskNotFound, TaskValidationError, type TaskRepository } from "../domain/task-repository.js";
 import { VaultApiError, VaultConflict, VaultInvalidNote, VaultUnavailable } from "../vault/errors.js";
 import { routeMessage } from "./router.js";
@@ -12,6 +13,7 @@ export interface WebhookDeps {
   client: TelegramClient;
   clock: Clock;
   tasks: TaskRepository;
+  metas: MetaRepository;
 }
 
 const SECRET_HEADER = "x-telegram-bot-api-secret-token";
@@ -51,7 +53,7 @@ function parseUpdate(event: APIGatewayProxyEventV2): TelegramUpdate | null {
  */
 export async function handleWebhook(
   event: APIGatewayProxyEventV2,
-  { config, client, clock, tasks }: WebhookDeps,
+  { config, client, clock, tasks, metas }: WebhookDeps,
 ): Promise<APIGatewayProxyResultV2> {
   if (!secretMatches(event.headers?.[SECRET_HEADER], config.webhookSecret)) {
     return reply(401);
@@ -68,7 +70,7 @@ export async function handleWebhook(
 
   let text: string;
   try {
-    text = await routeMessage(message.text, message.date, { clock, tasks });
+    text = await routeMessage(message.text, message.date, { clock, tasks, metas });
   } catch (err) {
     const outcome = describeError(err);
     if (outcome.kind === "retry") return reply(500);
@@ -94,6 +96,8 @@ export async function handleWebhook(
  */
 function describeError(err: unknown): { kind: "reply"; text: string } | { kind: "retry" } {
   if (err instanceof TaskValidationError) return { kind: "reply", text: err.message };
+  if (err instanceof MetaValidationError) return { kind: "reply", text: err.message };
+  if (err instanceof MetaNotFound) return { kind: "reply", text: "Meta não encontrada." };
   if (err instanceof TaskNotFound) return { kind: "reply", text: "Tarefa não encontrada." };
   if (err instanceof VaultInvalidNote) return { kind: "reply", text: `Não consegui ler uma nota: ${err.message}` };
   if (err instanceof VaultConflict) {

@@ -1,6 +1,8 @@
+import type { MetaRepository } from "../domain/meta-repository.js";
 import { exactTaskId, matchPending } from "../domain/task-resolve.js";
 import { TaskNotFound, TaskValidationError, type TaskRepository } from "../domain/task-repository.js";
 import type { Task } from "../domain/task.js";
+import { isSlug } from "../vault/slug.js";
 import { parseLocalDate, type LocalDate } from "../time/index.js";
 
 /**
@@ -9,10 +11,11 @@ import { parseLocalDate, type LocalDate } from "../time/index.js";
  *
  *   /tarefa <título>
  *   /tarefa <título> até AAAA-MM-DD
+ *   /tarefa <título> [até AAAA-MM-DD] #<id-da-meta>
  *   /feita <id-ou-trecho>
  *   /cancelar <id-ou-trecho>
  */
-export const TAREFA_USAGE = "Uso: /tarefa <título> [até AAAA-MM-DD]";
+export const TAREFA_USAGE = "Uso: /tarefa <título> [até AAAA-MM-DD] [#meta]";
 const DATE_HELP = "Use AAAA-MM-DD (ex.: 2026-10-02).";
 const MAX_CANDIDATES = 10;
 
@@ -21,16 +24,19 @@ const RELATIVE_WORDS = new Set([
   "sabado", "sábado", "domingo",
 ]);
 
-export type ParsedTarefa = { title: string; due?: LocalDate } | { error: string };
+export type ParsedTarefa = { title: string; due?: LocalDate; meta?: string } | { error: string };
 
-/** Só AAAA-MM-DD. Datas relativas são recusadas de propósito (fase 2). */
-export function parseTarefaArgs(args: string): ParsedTarefa {
+/**
+ * "título [até AAAA-MM-DD]", compartilhado por /tarefa e /meta. Só AAAA-MM-DD: datas
+ * relativas são recusadas de propósito (fase 2).
+ */
+export function parseTitleAndDue(args: string, usage: string): { title: string; due?: LocalDate } | { error: string } {
   const s = args.replace(/\s+/g, " ").trim();
-  if (s === "") return { error: TAREFA_USAGE };
+  if (s === "") return { error: usage };
   // "até" sem título: sozinho, ou seguido só de uma data/palavra relativa. "até logo" é um título.
   const bare = /^(?:até|ate)(?: (\S+))?$/i.exec(s);
   if (bare && (bare[1] === undefined || /^\d/.test(bare[1]) || RELATIVE_WORDS.has(bare[1].toLowerCase()))) {
-    return { error: `O título é obrigatório. ${TAREFA_USAGE}` };
+    return { error: `O título é obrigatório. ${usage}` };
   }
 
   const m = /^(.*\S) (?:até|ate) (\S+)$/i.exec(s);
@@ -51,25 +57,44 @@ export function parseTarefaArgs(args: string): ParsedTarefa {
   return { title: s }; // "ir até padaria": o "até" faz parte do título
 }
 
+/** Aceita "#meta" só como ÚLTIMA palavra, para não confundir com o meio de um título. */
+export function parseTarefaArgs(args: string): ParsedTarefa {
+  const s = args.replace(/\s+/g, " ").trim();
+  const m = /^(.*?) ?#(\S+)$/.exec(s);
+  if (!m) return parseTitleAndDue(s, TAREFA_USAGE);
+
+  const meta = m[2]!.toLowerCase();
+  if (!isSlug(meta)) return { error: `ID de meta inválido: #${m[2]}. Veja os IDs em /metas.` };
+  const rest = parseTitleAndDue(m[1]!, TAREFA_USAGE);
+  return "error" in rest ? rest : { ...rest, meta };
+}
+
 export async function cmdTarefa(
   args: string,
   eventEpochSeconds: number | undefined,
   tasks: TaskRepository,
+  metas: MetaRepository,
 ): Promise<string> {
   const parsed = parseTarefaArgs(args);
   if ("error" in parsed) return parsed.error;
+
+  const meta = parsed.meta === undefined ? null : await metas.find(parsed.meta);
+  if (parsed.meta !== undefined && !meta) return `Meta não encontrada: ${parsed.meta}. Veja os IDs em /metas.`;
 
   const { task, created } = await tasks.create({
     title: parsed.title,
     eventEpochSeconds: eventEpochSeconds as number, // ausente/ inválido vira TaskValidationError no repositório
     ...(parsed.due !== undefined && { due: parsed.due }),
+    ...(meta && { meta: meta.id }),
   });
 
   const lines = [created ? `Tarefa criada: ${task.title}` : `Tarefa já existe: ${task.title}`, `ID: ${task.id}`];
   if (task.due) lines.push(`Prazo: ${task.due}`);
+  if (task.meta) lines.push(`Meta: ${task.meta}`);
   if (!created && parsed.due !== undefined && parsed.due !== task.due) {
     lines.push("Obs.: o prazo pedido não foi alterado.");
   }
+  if (!created && meta && meta.id !== task.meta) lines.push("Obs.: a meta pedida não foi alterada.");
   return lines.join("\n");
 }
 

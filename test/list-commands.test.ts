@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MetaRepository } from "../src/domain/meta-repository.js";
 import { TaskRepository } from "../src/domain/task-repository.js";
 import { cmdHoje, cmdSemana } from "../src/telegram/list-commands.js";
 import { routeMessage } from "../src/telegram/router.js";
@@ -21,7 +22,7 @@ async function setup(tasks: { title: string; due?: string }[] = []) {
       ...(t.due !== undefined && { due: parseLocalDate(t.due) }),
     });
   }
-  return { clock, mem, repo };
+  return { clock, mem, repo, metas: new MetaRepository(guardVaultStore(mem), clock) };
 }
 
 const TASKS = [
@@ -125,8 +126,8 @@ describe("/semana", () => {
 
 describe("roteamento", () => {
   it("/hoje e /semana (com @bot) chegam nos comandos", async () => {
-    const { repo, clock } = await setup();
-    expect(await routeMessage("/hoje", undefined, { clock, tasks: repo })).toMatch(/^Hoje, sexta 25\/09/);
-    expect(await routeMessage("/semana@Hermesuntakedbot", undefined, { clock, tasks: repo })).toMatch(/^Semana 21\/09/);
+    const { repo, clock, metas } = await setup();
+    expect(await routeMessage("/hoje", undefined, { clock, tasks: repo, metas })).toMatch(/^Hoje, sexta 25\/09/);
+    expect(await routeMessage("/semana@Hermesuntakedbot", undefined, { clock, tasks: repo, metas })).toMatch(/^Semana 21\/09/);
   });
 });

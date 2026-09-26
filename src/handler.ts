@@ -1,4 +1,5 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda";
+import { MetaRepository } from "./domain/meta-repository.js";
 import { TaskRepository } from "./domain/task-repository.js";
 import { createSsmReader } from "./ssm.js";
 import { createTelegramClient } from "./telegram/client.js";
@@ -24,11 +25,13 @@ async function build(): Promise<ReturnType<typeof createHandler>> {
     loadTelegramConfig(ssm, telegramParamNamesFromEnv(process.env)),
     loadVaultConfig(ssm, process.env),
   ]);
+  const store = createGitHubVaultStore(vault);
   return createHandler({
     config,
     client: createTelegramClient(config.botToken),
     clock: systemClock,
-    tasks: new TaskRepository(createGitHubVaultStore(vault), systemClock),
+    tasks: new TaskRepository(store, systemClock),
+    metas: new MetaRepository(store, systemClock),
   });
 }
 

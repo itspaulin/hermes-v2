@@ -1,5 +1,6 @@
 import type { TaskRepository } from "../domain/task-repository.js";
 import { nowIso, type Clock } from "../time/index.js";
+import { cmdHoje, cmdSemana } from "./list-commands.js";
 import { cmdMudarStatus, cmdTarefa } from "./task-commands.js";
 
 export interface RouterDeps {
@@ -7,7 +8,7 @@ export interface RouterDeps {
   tasks: TaskRepository;
 }
 
-const COMMANDS_HELP = "Comandos: /tarefa, /feita, /cancelar, /ping";
+const COMMANDS_HELP = "Comandos: /tarefa, /feita, /cancelar, /hoje, /semana, /ping";
 const COMMAND_RE = /^\/([a-zA-Z0-9_]+)(?:@[a-zA-Z0-9_]+)?(?:\s+([\s\S]*))?$/;
 
 /** Comando e argumentos de um texto "/comando args", ou null se não começa com "/comando". */
@@ -44,6 +45,10 @@ export async function routeMessage(
       return cmdMudarStatus("feita", cmd.args, tasks);
     case "cancelar":
       return cmdMudarStatus("cancelada", cmd.args, tasks);
+    case "hoje":
+      return cmdHoje(tasks, clock);
+    case "semana":
+      return cmdSemana(tasks, clock);
     default:
       return `Comando desconhecido: /${cmd.name}. ${COMMANDS_HELP}`;
   }

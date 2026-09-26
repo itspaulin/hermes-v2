@@ -84,7 +84,7 @@ describe("comandos", () => {
 
   it("comando desconhecido", async () => {
     expect(await route("/foo")).toContain("Comando desconhecido: /foo");
-    expect(await route("/foo")).toContain("/tarefa, /feita, /cancelar, /ping");
+    expect(await route("/foo")).toContain("/tarefa, /feita, /cancelar, /hoje, /semana, /ping");
   });
 
   it("mensagem sem comando", async () => {

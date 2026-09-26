@@ -57,7 +57,7 @@ describe("allowlist de chat_id", () => {
   it("autorizado responde", async () => {
     const { handler, send } = setup();
     await handler(event({ body: msg("/start") }));
-    expect(send).toHaveBeenCalledWith(ALLOWED, expect.stringContaining("Use /ping"));
+    expect(send).toHaveBeenCalledWith(ALLOWED, expect.stringContaining("Conexão: /ping"));
   });
 
   it("não autorizado: 200 silencioso, sem resposta", async () => {
@@ -73,7 +73,16 @@ describe("comandos", () => {
   const route = (text: string) => routeMessage(text, undefined, deps);
 
   it("/start", async () =>
-    expect(await route("/start")).toBe("Hermes online.\n\nUse /ping para testar a conexão."));
+    expect(await route("/start")).toBe(
+      [
+        "Hermes online.",
+        "",
+        "Tarefas: /tarefa <título> [até AAAA-MM-DD], /feita, /cancelar, /hoje, /semana",
+        "Metas: /meta <título> [até AAAA-MM-DD], /metas, /metafeita, /metacancelar",
+        "Respostas: /checkin, /metrica, /revisao",
+        "Conexão: /ping",
+      ].join("\n"),
+    ));
 
   it("/ping devolve hora de SP", async () => {
     expect(await route("/ping")).toBe("pong 2026-09-25T14:30:00-03:00");

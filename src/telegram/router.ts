@@ -52,7 +52,14 @@ export async function routeMessage(
 
   switch (cmd.name) {
     case "start":
-      return "Hermes online.\n\nUse /ping para testar a conexão.";
+      return [
+        "Hermes online.",
+        "",
+        "Tarefas: /tarefa <título> [até AAAA-MM-DD], /feita, /cancelar, /hoje, /semana",
+        "Metas: /meta <título> [até AAAA-MM-DD], /metas, /metafeita, /metacancelar",
+        "Respostas: /checkin, /metrica, /revisao",
+        "Conexão: /ping",
+      ].join("\n");
     case "ping":
       return `pong ${nowIso(clock)}`;
     case "tarefa":

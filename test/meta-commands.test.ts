@@ -78,7 +78,7 @@ describe("/tarefa ... #meta", () => {
     const { say, mem } = setup();
     await say("/meta Melhorar LinkedIn");
     expect(await say("/tarefa Escrever post até 2026-10-02 #melhorar-linkedin")).toBe(
-      "Tarefa criada: Escrever post\nID: 2026-09-25-escrever-post\nPrazo: 2026-10-02\nMeta: melhorar-linkedin",
+      "Tarefa criada: Escrever post\nID: 2026-09-25-escrever-post\nPrazo: 2026-10-02\nMeta: Melhorar LinkedIn",
     );
     const note = (await mem.read("Hermes/tarefas/2026-09-25-escrever-post.md"))!.content;
     expect(note).toContain("meta: melhorar-linkedin");

@@ -44,7 +44,13 @@ export interface CreateTaskInput {
   /** Instante do EVENTO (ex.: message.date do Telegram), em epoch seconds. Define o ID e `created`. */
   eventEpochSeconds: number;
   due?: LocalDate;
+  /** ID da meta (campo `meta` do frontmatter). */
   meta?: string;
+  /**
+   * Data usada no ID, em vez da data do evento. Só para confirmar uma tarefa cuja pergunta
+   * ("pertence a alguma meta?") foi feita antes: o ID continua o do /tarefa original.
+   */
+  idDate?: LocalDate;
 }
 
 export interface PendingListing {
@@ -67,8 +73,11 @@ export class TaskRepository {
     private readonly clock: Clock,
   ) {}
 
-  /** Idempotente: mesmo evento/título gera o mesmo ID; se já existe, devolve a existente. */
-  async create(input: CreateTaskInput): Promise<{ task: Task; created: boolean }> {
+  /**
+   * Valida a entrada e calcula o que `create` gravaria, sem tocar o Vault. Quem precisa de
+   * perguntar algo antes de criar usa isto para falhar cedo e para saber o ID.
+   */
+  plan(input: CreateTaskInput): { id: string; title: string; createdAt: string } {
     const title = normalizeTitle(input.title);
     let slug: string;
     try {
@@ -80,18 +89,23 @@ export class TaskRepository {
     if (input.meta !== undefined && !isSlug(input.meta)) {
       throw new TaskValidationError(`ID de meta inválido: ${input.meta}`);
     }
+    if (input.idDate !== undefined) validateDue(input.idDate);
 
     // Tempo do evento (não o relógio): um reenvio depois da meia-noite mantém o ID.
     let date: LocalDate;
     let createdAt: string;
     try {
-      date = localDateOfEpochSeconds(input.eventEpochSeconds);
+      date = input.idDate ?? localDateOfEpochSeconds(input.eventEpochSeconds);
       createdAt = instantIsoOfEpochSeconds(input.eventEpochSeconds);
     } catch {
       throw new TaskValidationError("Instante do evento inválido");
     }
+    return { id: `${date}-${slug}`, title, createdAt };
+  }
 
-    const id = `${date}-${slug}`;
+  /** Idempotente: mesmo evento/título gera o mesmo ID; se já existe, devolve a existente. */
+  async create(input: CreateTaskInput): Promise<{ task: Task; created: boolean }> {
+    const { id, title, createdAt } = this.plan(input);
     const path = taskPath(id);
     const content = renderNote(
       {

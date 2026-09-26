@@ -100,7 +100,7 @@ export async function getWebhookInfo(token: string, fetchImpl: typeof fetch = fe
 }
 
 /**
- * Registra o webhook: só mensagens, com secret_token. NÃO usa drop_pending_updates:
+ * Registra o webhook: mensagens e toques em botões (callback_query), com secret_token. NÃO usa drop_pending_updates:
  * atualizações pendentes durante a configuração não são descartadas em silêncio.
  */
 export async function setWebhook(
@@ -112,7 +112,7 @@ export async function setWebhook(
   await call(args.token, "setWebhook", fetchImpl, {
     url,
     secret_token: secret,
-    allowed_updates: ["message"],
+    allowed_updates: ["message", "callback_query"],
   });
   const info = await getWebhookInfo(args.token, fetchImpl);
   if (info.url !== url) throw new Error("O Telegram registrou uma URL diferente da pedida");

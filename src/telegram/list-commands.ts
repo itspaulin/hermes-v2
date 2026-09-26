@@ -1,3 +1,4 @@
+import type { MetaRepository } from "../domain/meta-repository.js";
 import type { TaskRepository } from "../domain/task-repository.js";
 import type { Task } from "../domain/task.js";
 import { currentWeek, today, weekdayOf, type Clock, type LocalDate } from "../time/index.js";
@@ -9,17 +10,33 @@ import { currentWeek, today, weekdayOf, type Clock, type LocalDate } from "../ti
 const WEEKDAYS = ["", "segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"] as const;
 
 const br = (d: LocalDate): string => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
-const item = (t: Task): string => `- ${t.title}`;
-const dated = (t: Task): string => `- ${t.title} (${br(t.due!)})`;
+type Formatter = (t: Task) => string;
+
+/**
+ * Cada tarefa numa linha e, se tiver meta, "Meta: <título>" na linha de baixo. Só lê as metas do
+ * Vault se alguma tarefa listada tiver `meta`. Meta que sumiu do Vault aparece pelo ID.
+ */
+async function formatters(pending: readonly Task[], metas: MetaRepository): Promise<{ item: Formatter; dated: Formatter }> {
+  const titles = new Map<string, string>();
+  if (pending.some((t) => t.meta !== undefined)) {
+    for (const m of (await metas.list()).metas) titles.set(m.id, m.title);
+  }
+  const metaLine = (t: Task): string => (t.meta === undefined ? "" : `\n  Meta: ${titles.get(t.meta) ?? t.meta}`);
+  return {
+    item: (t) => `- ${t.title}${metaLine(t)}`,
+    dated: (t) => `- ${t.title} (${br(t.due!)})${metaLine(t)}`,
+  };
+}
 const count = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
 
 function skippedNote(n: number): string[] {
   return n === 0 ? [] : ["", `Obs.: ${count(n, "nota ignorada por estar inválida", "notas ignoradas por estarem inválidas")}.`];
 }
 
-export async function cmdHoje(tasks: TaskRepository, clock: Clock): Promise<string> {
+export async function cmdHoje(tasks: TaskRepository, metas: MetaRepository, clock: Clock): Promise<string> {
   const now = today(clock);
   const { tasks: pending, skipped } = await tasks.listPending();
+  const { item, dated } = await formatters(pending, metas);
 
   const overdue = pending.filter((t) => t.due && t.due < now);
   const dueToday = pending.filter((t) => t.due === now);
@@ -35,10 +52,11 @@ export async function cmdHoje(tasks: TaskRepository, clock: Clock): Promise<stri
   return [...lines, ...skippedNote(skipped.length)].join("\n");
 }
 
-export async function cmdSemana(tasks: TaskRepository, clock: Clock): Promise<string> {
+export async function cmdSemana(tasks: TaskRepository, metas: MetaRepository, clock: Clock): Promise<string> {
   const week = currentWeek(clock);
   const now = today(clock);
   const { tasks: pending, skipped } = await tasks.listPending();
+  const { item, dated } = await formatters(pending, metas);
 
   const overdue = pending.filter((t) => t.due && t.due < week.start);
   const undated = pending.filter((t) => !t.due);

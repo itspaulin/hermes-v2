@@ -55,15 +55,15 @@ describe("validateSecret", () => {
 });
 
 describe("setWebhook", () => {
-  const info = { url: URL_OK, pending_update_count: 0, allowed_updates: ["message"] };
+  const info = { url: URL_OK, pending_update_count: 0, allowed_updates: ["message", "callback_query"] };
 
-  it("envia url, secret_token e allowed_updates=[message]; NÃO usa drop_pending_updates", async () => {
+  it("envia url, secret_token e allowed_updates=[message, callback_query]; NÃO usa drop_pending_updates", async () => {
     const { f, calls } = fakeApi({ setWebhook: () => ok(true), getWebhookInfo: () => ok(info) });
     const r = await setWebhook({ token: TOKEN, secret: SECRET, url: URL_OK }, f);
     expect(calls.map((c) => c.method)).toEqual(["setWebhook", "getWebhookInfo"]);
-    expect(calls[0]!.body).toEqual({ url: URL_OK, secret_token: SECRET, allowed_updates: ["message"] });
+    expect(calls[0]!.body).toEqual({ url: URL_OK, secret_token: SECRET, allowed_updates: ["message", "callback_query"] });
     expect(calls[0]!.body).not.toHaveProperty("drop_pending_updates");
-    expect(r).toMatchObject({ url: URL_OK, pendingUpdateCount: 0, allowedUpdates: ["message"] });
+    expect(r).toMatchObject({ url: URL_OK, pendingUpdateCount: 0, allowedUpdates: ["message", "callback_query"] });
   });
 
   it("URL ou secret inválidos falham antes de qualquer chamada", async () => {

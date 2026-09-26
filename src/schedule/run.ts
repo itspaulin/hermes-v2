@@ -29,7 +29,7 @@ export interface ScheduleDeps {
   metas: MetaRepository;
   checkins: CheckinRepository;
   reviews: ReviewRepository;
-  client: TelegramClient;
+  client: Pick<TelegramClient, "sendMessage">;
   chatIds: readonly number[];
 }
 

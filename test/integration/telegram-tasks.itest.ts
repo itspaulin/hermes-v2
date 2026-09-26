@@ -42,29 +42,77 @@ const pathOf = (label: string) => {
 };
 const bodyOf = (c: string) => c.slice(c.indexOf("\n---", 4) + 4);
 
+/** Mensagem do bot como o Telegram a devolveria num reply ou num toque de botão. */
+interface BotMsg {
+  message_id: number;
+  chat: { id: number; type: string };
+  from: { id: number; is_bot: boolean };
+  date: number;
+  text: string;
+  keyboard?: { text: string; data: string }[][];
+}
+
 function bot(store: ReturnType<typeof createGitHubVaultStore>, nowIso = "2020-01-01T15:10:00Z") {
   const clock = fakeClock(nowIso);
   const replies: string[] = [];
+  const sent: BotMsg[] = [];
+  let msgDate = EVENT;
   const handler = createHandler({
     config: { botToken: "tok", webhookSecret: SECRET, allowedChatIds: [CHAT] },
-    client: { sendMessage: async (_c, t) => void replies.push(t) },
+    client: {
+      async sendMessage(chat, text, keyboard) {
+        replies.push(text);
+        sent.push({ message_id: 9000 + sent.length, chat: { id: chat, type: "private" }, from: { id: 1, is_bot: true }, date: msgDate, text, ...(keyboard && { keyboard }) });
+      },
+      answerCallbackQuery: async () => {},
+      editMessageText: async () => {},
+    },
     clock,
     ...makeRepos(store, clock),
   });
   let n = 0;
+  const post = async (update: object) =>
+    (await handler({
+      headers: { "x-telegram-bot-api-secret-token": SECRET },
+      body: JSON.stringify({ update_id: ++n, ...update }),
+    } as never)) as { statusCode: number };
+  const strip = ({ keyboard: _k, ...m }: BotMsg) => m;
+
+  /** Manda o texto; devolve a resposta (a última mensagem do bot), se houve. */
+  async function sendRaw(text: string, opts: { date?: number; chat?: number; replyTo?: BotMsg } = {}) {
+    const before = replies.length;
+    msgDate = opts.date ?? EVENT;
+    const res = await post({
+      message: {
+        message_id: n + 1,
+        chat: { id: opts.chat ?? CHAT, type: "private" },
+        date: opts.date ?? EVENT,
+        text,
+        ...(opts.replyTo && { reply_to_message: strip(opts.replyTo) }),
+      },
+    });
+    return { status: res.statusCode, reply: replies.length > before ? replies.at(-1)! : undefined };
+  }
+
   return {
     clock,
     replies,
+    sent,
+    sendRaw,
+    /** Toca o botão `k` (1..) da mensagem `m`. */
+    press: (m: BotMsg, k: number) =>
+      post({ callback_query: { id: `cb${n + 1}`, from: { id: CHAT }, message: strip(m), data: m.keyboard![k - 1]![0]!.data } }),
+    /**
+     * Como sendRaw, mas o Vault real tem metas ativas, então um /tarefa sem #meta volta como
+     * PERGUNTA. Aqui esses testes só querem criar a tarefa: responde "nenhuma" (reply à pergunta)
+     * e devolve a resposta de criação sem a linha "Sem meta específica.".
+     */
     async send(text: string, opts: { date?: number; chat?: number } = {}) {
-      const before = replies.length;
-      const res = (await handler({
-        headers: { "x-telegram-bot-api-secret-token": SECRET },
-        body: JSON.stringify({
-          update_id: ++n,
-          message: { message_id: n, chat: { id: opts.chat ?? CHAT, type: "private" }, date: opts.date ?? EVENT, text },
-        }),
-      } as never)) as { statusCode: number };
-      return { status: res.statusCode, reply: replies.length > before ? replies.at(-1)! : undefined };
+      const out = await sendRaw(text, opts);
+      const asked = sent.at(-1);
+      if (!out.reply?.includes("Essa tarefa pertence a alguma meta?") || !asked) return out;
+      const answer = await sendRaw("nenhuma", { ...opts, replyTo: asked });
+      return { ...answer, reply: answer.reply?.replace(/\nSem meta específica\.$/, "") };
     },
   };
 }
@@ -195,6 +243,31 @@ describe("Telegram -> handler -> GitHub real (verificado direto na API)", () => 
     const path = pathOf("intruso");
     expect(await b.send(`/tarefa ${title("intruso")}`, { chat: 999 })).toEqual({ status: 200, reply: undefined });
     expect(await raw.get(path)).toBeNull();
+  });
+
+  it("11. pergunta de meta com as metas REAIS do Vault: o botão grava o ID da meta (só lê as metas)", async (ctx) => {
+    const store = createGitHubVaultStore(cfg);
+    const b = bot(store);
+    const label = "meta botao";
+    const path = pathOf(label);
+    const out = await b.sendRaw(`/tarefa ${title(label)}`);
+    const q = b.sent.at(-1)!;
+    if (!out.reply?.includes("Essa tarefa pertence a alguma meta?")) return ctx.skip(); // Vault sem metas ativas
+    expect(await raw.get(path)).toBeNull(); // perguntar não cria nada
+    expect(q.keyboard!.length).toBeGreaterThanOrEqual(2);
+
+    const firstMetaId = /^1\. .*\n {3}ID: (\S+)$/m.exec(q.text)![1]!;
+    expect((await b.press(q, 1)).statusCode).toBe(200);
+
+    const file = (await raw.get(path))!.content;
+    expect(file).toMatch(new RegExp(`^meta: ${firstMetaId}$`, "m")); // o ID da meta, não "1" nem o título
+    expect(file).not.toContain("meta_id");
+    expect(file).toContain(`\n# ${title(label)}\n\nMeta: [[${firstMetaId}]]\n`);
+    expect(await raw.commitCount(path)).toBe(1);
+
+    // o mesmo toque de novo (reentrega do Telegram): sem commit novo
+    await b.press(q, 1);
+    expect(await raw.commitCount(path)).toBe(1);
   });
 
   it("9. credencial inválida no GitHub real: 200 com mensagem genérica, sem vazar o token", async () => {

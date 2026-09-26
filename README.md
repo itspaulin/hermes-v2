@@ -56,7 +56,7 @@ Respostas do webhook: 401 secret errado, 400 payload inválido, 200 ignorado/res
 ```
 /tarefa <título>
 /tarefa <título> até AAAA-MM-DD      # só AAAA-MM-DD; datas relativas ("amanhã") são recusadas
-/tarefa <título> [até AAAA-MM-DD] #<id-da-meta>   # vincula à meta; "#meta" só vale como última palavra
+/tarefa <título> [até AAAA-MM-DD] #<id-da-meta>   # cria já vinculada, sem perguntar; "#meta" só vale como última palavra
 /feita <id-ou-trecho>
 /cancelar <id-ou-trecho>
 /hoje                                # atrasadas, para hoje, sem prazo
@@ -84,7 +84,10 @@ Definida em `src/config.ts`; `template.yaml` tem um schedule por entrada (fuso `
 
 O Hermes registra fatos; não julga se a semana foi boa. A resposta vai no campo `answer` do frontmatter (o corpo é seu). Falha no Vault ou no Telegram repete até 2 vezes; como criar é idempotente, a repetição só reenvia a mensagem. Slot já respondido não é reenviado. Teste manual fora do calendário: invocar a Lambda com `{"kind":"checkin","force":true}`.
 
-- O ID da meta é o slug do título (sem data): o mesmo título é a mesma meta. Uma tarefa com `#meta` grava `meta:` no frontmatter e um wikilink `[[meta]]` no corpo; a meta precisa existir, senão a tarefa não é criada.
+- O ID da meta é o slug do título (sem data): o mesmo título é a mesma meta. Uma tarefa com meta grava `meta: <id da meta>` no frontmatter e um wikilink `[[meta]]` no corpo.
+- **`/tarefa` sem `#meta` pergunta a meta** (se houver metas ativas): o Hermes responde com a lista numerada e um botão por opção, e a tarefa só é criada na resposta. Responda tocando no botão, ou respondendo (reply do Telegram) à pergunta com o número, `não` ou `nenhuma`. Uma mensagem solta `1` não tem contexto e é ignorada. Sem estado guardado: a pergunta carrega tudo (título, prazo, ID da tarefa e das metas), e a meta é revalidada (existe e está ativa) na hora de gravar. Perguntas valem por 24 h. Duas `/tarefa` seguidas geram duas perguntas independentes; nenhuma sobrescreve a outra.
+- O webhook precisa receber `callback_query`: depois de mudar isso, registre de novo com `./scripts/set-webhook.sh <URL>`.
+- `/hoje` e `/semana` mostram `Meta: <título>` sob cada tarefa que tem meta.
 
 - O ID da tarefa é `AAAA-MM-DD-<slug do título>`, com a data do **evento** (`message.date` do Telegram), não a do processamento. Mesmo título no mesmo dia é a mesma tarefa: reenviar não duplica.
 - `/feita` e `/cancelar` aceitam o ID completo ou um trecho (normalizado como slug), resolvido **só entre tarefas pendentes**. Um ID completo também acha tarefa já feita (resposta "Já estava feita", sem commit). Zero ou várias correspondências: "Tarefa não encontrada." ou a lista de candidatos, sem alterar nada.

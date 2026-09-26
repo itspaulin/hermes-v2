@@ -19,7 +19,7 @@ function setup(sendMessage: TelegramClient["sendMessage"] = async () => {}) {
   const store = guardVaultStore(new InMemoryVaultStore());
   const handler = createHandler({
     config: { botToken: "tok", webhookSecret: SECRET, allowedChatIds: [ALLOWED] },
-    client: { sendMessage: send },
+    client: { sendMessage: send, answerCallbackQuery: async () => {}, editMessageText: async () => {} },
     clock,
     ...makeRepos(store, clock),
   });

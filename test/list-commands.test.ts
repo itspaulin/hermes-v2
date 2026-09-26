@@ -37,8 +37,8 @@ const TASKS = [
 
 describe("/hoje", () => {
   it("separa atrasadas, hoje e sem prazo, e conta as futuras", async () => {
-    const { repo, clock } = await setup(TASKS);
-    expect(await cmdHoje(repo, clock)).toBe(
+    const { repo, clock, repos } = await setup(TASKS);
+    expect(await cmdHoje(repo, repos.metas, clock)).toBe(
       [
         "Hoje, sexta 25/09",
         "",
@@ -58,28 +58,28 @@ describe("/hoje", () => {
   });
 
   it("sem tarefas", async () => {
-    const { repo, clock } = await setup();
-    expect(await cmdHoje(repo, clock)).toBe("Hoje, sexta 25/09\n\nNada atrasado nem para hoje.");
+    const { repo, clock, repos } = await setup();
+    expect(await cmdHoje(repo, repos.metas, clock)).toBe("Hoje, sexta 25/09\n\nNada atrasado nem para hoje.");
   });
 
   it("ignora feitas e canceladas", async () => {
-    const { repo, clock } = await setup([{ title: "A", due: "2026-09-25" }, { title: "B", due: "2026-09-25" }]);
+    const { repo, clock, repos } = await setup([{ title: "A", due: "2026-09-25" }, { title: "B", due: "2026-09-25" }]);
     const { tasks } = await repo.listPending();
     await repo.complete(tasks[0]!.id);
     await repo.cancel(tasks[1]!.id);
-    expect(await cmdHoje(repo, clock)).toBe("Hoje, sexta 25/09\n\nNada atrasado nem para hoje.");
+    expect(await cmdHoje(repo, repos.metas, clock)).toBe("Hoje, sexta 25/09\n\nNada atrasado nem para hoje.");
   });
 
   it("usa a data de São Paulo, não a de UTC (23h em SP já é dia seguinte em UTC)", async () => {
-    const { repo } = await setup([{ title: "Do dia", due: "2026-09-25" }]);
+    const { repo, repos } = await setup([{ title: "Do dia", due: "2026-09-25" }]);
     const late = fakeClock("2026-09-26T01:30:00Z"); // 25/09 22:30 em SP
-    expect(await cmdHoje(repo, late)).toContain("Para hoje (1):\n- Do dia");
+    expect(await cmdHoje(repo, repos.metas, late)).toContain("Para hoje (1):\n- Do dia");
   });
 
   it("avisa sobre notas inválidas sem falhar", async () => {
-    const { repo, clock, mem } = await setup([{ title: "Boa", due: "2026-09-25" }]);
+    const { repo, clock, mem, repos } = await setup([{ title: "Boa", due: "2026-09-25" }]);
     mem.externalWrite("Hermes/tarefas/2026-09-20-quebrada.md", "sem frontmatter");
-    const out = await cmdHoje(repo, clock);
+    const out = await cmdHoje(repo, repos.metas, clock);
     expect(out).toContain("- Boa");
     expect(out).toContain("Obs.: 1 nota ignorada por estar inválida.");
   });
@@ -87,8 +87,8 @@ describe("/hoje", () => {
 
 describe("/semana", () => {
   it("agrupa por dia, marca hoje, e separa atrasadas, sem prazo e depois da semana", async () => {
-    const { repo, clock } = await setup([...TASKS, { title: "Outra hoje", due: "2026-09-25" }]);
-    expect(await cmdSemana(repo, clock)).toBe(
+    const { repo, clock, repos } = await setup([...TASKS, { title: "Outra hoje", due: "2026-09-25" }]);
+    expect(await cmdSemana(repo, repos.metas, clock)).toBe(
       [
         "Semana 21/09 a 27/09",
         "",
@@ -114,14 +114,14 @@ describe("/semana", () => {
   });
 
   it("sem tarefas", async () => {
-    const { repo, clock } = await setup();
-    expect(await cmdSemana(repo, clock)).toBe("Semana 21/09 a 27/09\n\nNada pendente nesta semana.");
+    const { repo, clock, repos } = await setup();
+    expect(await cmdSemana(repo, repos.metas, clock)).toBe("Semana 21/09 a 27/09\n\nNada pendente nesta semana.");
   });
 
   it("domingo pertence à semana que termina nele", async () => {
-    const { repo } = await setup([{ title: "Descanso", due: "2026-09-27" }]);
+    const { repo, repos } = await setup([{ title: "Descanso", due: "2026-09-27" }]);
     const sunday = fakeClock("2026-09-27T15:00:00Z");
-    expect(await cmdSemana(repo, sunday)).toContain("domingo 27/09 (hoje):\n- Descanso");
+    expect(await cmdSemana(repo, repos.metas, sunday)).toContain("domingo 27/09 (hoje):\n- Descanso");
   });
 });
 

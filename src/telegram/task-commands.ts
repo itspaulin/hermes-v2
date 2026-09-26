@@ -1,9 +1,10 @@
-import type { MetaRepository } from "../domain/meta-repository.js";
 import { exactTaskId, matchPending } from "../domain/task-resolve.js";
 import { TaskNotFound, TaskValidationError, type TaskRepository } from "../domain/task-repository.js";
 import type { Task } from "../domain/task.js";
 import { isSlug } from "../vault/slug.js";
 import { parseLocalDate, type LocalDate } from "../time/index.js";
+import type { RouteResult } from "./reply.js";
+import { activeMetas, askMeta, createdText, createTask, metaUnavailableText, type FlowDeps } from "./task-flow.js";
 
 /**
  * Comandos de tarefa. Falam com o TaskRepository (domínio), nunca com GitHub.
@@ -69,33 +70,39 @@ export function parseTarefaArgs(args: string): ParsedTarefa {
   return "error" in rest ? rest : { ...rest, meta };
 }
 
+/**
+ * /tarefa. Com `#meta` cria direto (mesmas validações da escolha interativa: a meta precisa
+ * existir e estar ativa). Sem `#meta` e com metas ativas, PERGUNTA a meta antes de criar (botões
+ * ou resposta à mensagem; ver meta-question.ts). Sem metas ativas, cria direto. Se a tarefa já
+ * existe (reenvio do Telegram), só responde "já existe", sem perguntar de novo.
+ */
 export async function cmdTarefa(
   args: string,
   eventEpochSeconds: number | undefined,
-  tasks: TaskRepository,
-  metas: MetaRepository,
-): Promise<string> {
+  deps: FlowDeps,
+): Promise<RouteResult> {
   const parsed = parseTarefaArgs(args);
   if ("error" in parsed) return parsed.error;
 
-  const meta = parsed.meta === undefined ? null : await metas.find(parsed.meta);
-  if (parsed.meta !== undefined && !meta) return `Meta não encontrada: ${parsed.meta}. Veja os IDs em /metas.`;
+  const { tasks, metas } = deps;
+  const epoch = eventEpochSeconds as number; // ausente/inválido vira TaskValidationError em plan()
+  const plan = tasks.plan({ title: parsed.title, eventEpochSeconds: epoch, ...(parsed.due !== undefined && { due: parsed.due }) });
+  const input = { title: parsed.title, eventEpochSeconds: epoch, ...(parsed.due !== undefined && { due: parsed.due }) };
 
-  const { task, created } = await tasks.create({
-    title: parsed.title,
-    eventEpochSeconds: eventEpochSeconds as number, // ausente/ inválido vira TaskValidationError no repositório
-    ...(parsed.due !== undefined && { due: parsed.due }),
-    ...(meta && { meta: meta.id }),
-  });
-
-  const lines = [created ? `Tarefa criada: ${task.title}` : `Tarefa já existe: ${task.title}`, `ID: ${task.id}`];
-  if (task.due) lines.push(`Prazo: ${task.due}`);
-  if (task.meta) lines.push(`Meta: ${task.meta}`);
-  if (!created && parsed.due !== undefined && parsed.due !== task.due) {
-    lines.push("Obs.: o prazo pedido não foi alterado.");
+  if (parsed.meta !== undefined) {
+    const meta = await metas.find(parsed.meta);
+    if (!meta) return `Meta não encontrada: ${parsed.meta}. Veja os IDs em /metas.`;
+    if (meta.status !== "ativa") return metaUnavailableText(meta);
+    return createTask(input, { meta, explicitNone: false }, deps);
   }
-  if (!created && meta && meta.id !== task.meta) lines.push("Obs.: a meta pedida não foi alterada.");
-  return lines.join("\n");
+
+  const existing = await tasks.find(plan.id);
+  if (existing) {
+    return createdText(existing, false, { meta: null, explicitNone: false, ...(parsed.due !== undefined && { requestedDue: parsed.due }) });
+  }
+  if ((await activeMetas(metas)).length === 0) return createTask(input, { meta: null, explicitNone: false }, deps);
+
+  return askMeta({ id: plan.id, title: plan.title, ...(parsed.due !== undefined && { due: parsed.due }) }, metas);
 }
 
 const LABELS = {

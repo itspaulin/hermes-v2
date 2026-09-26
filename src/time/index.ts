@@ -145,6 +145,11 @@ export function toInstantIso(date: LocalDate, time: LocalTime): string {
   return dt.toISO({ suppressMilliseconds: true })!;
 }
 
+/** Segundos desde um instante em epoch seconds (ex.: message.date do Telegram). Negativo se estiver no futuro. */
+export function secondsSince(clock: Clock, epochSeconds: number): number {
+  return Math.floor(clock.nowMs() / 1000) - epochSeconds;
+}
+
 /** Data (em America/Sao_Paulo) de um instante ISO 8601 com offset. */
 export function localDateOfInstant(iso: string): LocalDate {
   if (!/(Z|[+-]\d{2}:\d{2})$/.test(iso)) {

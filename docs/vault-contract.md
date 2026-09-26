@@ -66,7 +66,7 @@ Campos comuns:
 
 Campos por tipo:
 
-- **tarefa:** `due` (`LocalDate`, opcional), `meta` (ID de meta, opcional), `done_at` (instante, definido só na primeira transição para `feita`). Status: `pendente`, `feita`, `cancelada`.
+- **tarefa:** `due` (`LocalDate`, opcional), `meta` (ID da meta, opcional; ver "Vínculo tarefa-meta" abaixo), `done_at` (instante, definido só na primeira transição para `feita`). Status: `pendente`, `feita`, `cancelada`.
 - **meta:** `due` (`LocalDate`, opcional). Status: `ativa`, `concluida`, `pausada`, `cancelada`.
 - **checkin:** `date` (`LocalDate`), `kind` (`checkin` = diário, `metrics` = quinta), `answer` (texto, opcional), `answered_at` (instante, opcional). O corpo é criado pelo Hermes com o **contexto calculado** (contagens do dia ou métricas da semana) e daí em diante é do usuário.
 - **revisao:** `week` (`2026-W39`), `week_start` (`LocalDate`, a segunda-feira), `answer`, `answered_at`. O corpo traz o resumo da semana (tarefas, metas, check-ins, métricas manuais) na criação, sábado 18h. O arquivo é plano em `revisoes/` (sem pasta de ano).
@@ -93,6 +93,15 @@ Notas livres aqui. O Hermes não mexe no corpo depois de criado.
 ```
 
 O vínculo com a meta fica no campo `meta` (dado para o Hermes). O corpo pode ter um wikilink `[[melhorar-linkedin]]` gerado na criação, só para navegação no Obsidian; o Hermes nunca depende do corpo.
+
+### Vínculo tarefa-meta
+
+- O campo `meta` da tarefa guarda o **ID da meta** (o slug do nome do arquivo em `Hermes/metas/`), nunca o título nem o número de uma opção de menu.
+- Uma tarefa pertence a **no máximo uma** meta, ou a nenhuma. Sem meta, o campo é **omitido** (nunca `meta: null` nem vazio).
+- Ao criar, o Hermes só grava `meta` se a meta **existe e está `ativa`** naquele momento (validação no Vault, na hora de gravar). Não cria referência quebrada. Se depois a meta for apagada à mão ou mudar de status, a tarefa não é alterada; as listagens mostram o ID no lugar do título quando a meta sumiu.
+- A relação **não altera status em nenhum sentido**: concluir/cancelar a tarefa não muda a meta, e concluir/cancelar a meta não muda as tarefas. `/feita` e `/cancelar` preservam `meta`.
+- O Hermes **nunca apaga** o arquivo de uma tarefa.
+- **Como o `meta` é escolhido** (Telegram): `/tarefa <título> #<id-da-meta>` cria direto. Sem `#meta`, se existirem metas ativas, o Hermes **pergunta** antes de criar (botões e resposta por texto); sem metas ativas, cria direto. Nada é guardado entre a pergunta e a resposta (nem no Vault, nem em memória): a própria mensagem da pergunta carrega o contexto (título, prazo, ID da tarefa e o ID de cada meta da lista), que o Telegram devolve no toque do botão ou no *reply*. A tarefa só passa a existir na resposta, com o ID calculado na pergunta (data do `/tarefa` original), então reenvios continuam idempotentes. A resposta vale por 24 h.
 
 ## 5. Quem escreve o quê
 

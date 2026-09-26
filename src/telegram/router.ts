@@ -3,6 +3,9 @@ import type { ReviewRepository } from "../domain/review-repository.js";
 import type { MetaRepository } from "../domain/meta-repository.js";
 import type { TaskRepository } from "../domain/task-repository.js";
 import { nowIso, type Clock } from "../time/index.js";
+import { answerByText } from "./meta-answer.js";
+import type { RouteResult } from "./reply.js";
+import type { TelegramMessage } from "./types.js";
 import { cmdHoje, cmdSemana } from "./list-commands.js";
 import { cmdResponderCheckin, cmdRevisao } from "./report-commands.js";
 import { cmdMeta, cmdMetas, cmdMudarStatusMeta } from "./meta-commands.js";
@@ -31,16 +34,21 @@ export function parseCommand(text: string): string | null {
 }
 
 /**
- * Devolve a resposta para um texto recebido. `eventEpochSeconds` é o `message.date` do
+ * Devolve a resposta para um texto recebido (`replyTo`: a mensagem à qual ele responde, se houver). `eventEpochSeconds` é o `message.date` do
  * Telegram: define a data das tarefas (nunca o relógio). Erros de infraestrutura propagam.
  */
 export async function routeMessage(
   text: string,
   eventEpochSeconds: number | undefined,
   { clock, tasks, metas, checkins, reviews }: RouterDeps,
-): Promise<string> {
+  replyTo?: TelegramMessage,
+): Promise<RouteResult> {
   const cmd = parseCommandLine(text);
-  if (!cmd) return `Envie um comando. ${COMMANDS_HELP}`;
+  if (!cmd) {
+    // Texto solto só tem contexto se for resposta (reply) a uma pergunta do próprio Hermes.
+    const answered = replyTo ? await answerByText(text, replyTo, { clock, tasks, metas }) : null;
+    return answered ?? `Envie um comando. ${COMMANDS_HELP}`;
+  }
 
   switch (cmd.name) {
     case "start":
@@ -48,7 +56,7 @@ export async function routeMessage(
     case "ping":
       return `pong ${nowIso(clock)}`;
     case "tarefa":
-      return cmdTarefa(cmd.args, eventEpochSeconds, tasks, metas);
+      return cmdTarefa(cmd.args, eventEpochSeconds, { tasks, metas });
     case "feita":
       return cmdMudarStatus("feita", cmd.args, tasks);
     case "cancelar":
@@ -68,9 +76,9 @@ export async function routeMessage(
     case "revisao":
       return cmdRevisao(cmd.args, reviews, clock);
     case "hoje":
-      return cmdHoje(tasks, clock);
+      return cmdHoje(tasks, metas, clock);
     case "semana":
-      return cmdSemana(tasks, clock);
+      return cmdSemana(tasks, metas, clock);
     default:
       return `Comando desconhecido: /${cmd.name}. ${COMMANDS_HELP}`;
   }

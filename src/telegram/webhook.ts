@@ -8,8 +8,10 @@ import { ReviewNotFound, type ReviewRepository } from "../domain/review-reposito
 import { MetaNotFound, MetaValidationError, type MetaRepository } from "../domain/meta-repository.js";
 import { TaskNotFound, TaskValidationError, type TaskRepository } from "../domain/task-repository.js";
 import { VaultApiError, VaultConflict, VaultInvalidNote, VaultUnavailable } from "../vault/errors.js";
+import { answerByCallback, type CallbackOutcome } from "./meta-answer.js";
+import { asReply, type Reply } from "./reply.js";
 import { routeMessage } from "./router.js";
-import type { TelegramConfig, TelegramUpdate } from "./types.js";
+import type { TelegramCallbackQuery, TelegramConfig, TelegramUpdate } from "./types.js";
 
 export interface WebhookDeps {
   config: TelegramConfig;
@@ -67,23 +69,26 @@ export async function handleWebhook(
   const update = parseUpdate(event);
   if (!update) return reply(400);
 
+  const deps = { clock, tasks, metas, checkins, reviews };
+  if (update.callback_query) return handleCallback(update.callback_query, config, client, deps);
+
   const message = update.message;
   if (!message || typeof message.text !== "string") return reply(200);
 
   // Chat não autorizado: ignora em silêncio, sem revelar que o bot existe.
   if (!config.allowedChatIds.includes(message.chat.id)) return reply(200);
 
-  let text: string;
+  let result: Reply;
   try {
-    text = await routeMessage(message.text, message.date, { clock, tasks, metas, checkins, reviews });
+    result = asReply(await routeMessage(message.text, message.date, deps, message.reply_to_message));
   } catch (err) {
     const outcome = describeError(err);
     if (outcome.kind === "retry") return reply(500);
-    text = outcome.text;
+    result = { text: outcome.text };
   }
 
   try {
-    await client.sendMessage(message.chat.id, text);
+    await send(client, message.chat.id, result);
   } catch (err) {
     if (err instanceof TelegramApiError) {
       console.error(`[telegram] ${err.message}`);
@@ -92,6 +97,60 @@ export async function handleWebhook(
     console.error("[hermes] erro inesperado ao responder", err);
     return reply(500);
   }
+  // Já respondeu: reescrever a pergunta antiga é só arrumação (some com os botões). Nunca pede reenvio.
+  if (result.closes) await bestEffort(() => client.editMessageText(message.chat.id, result.closes!.messageId, result.closes!.text));
+  return reply(200);
+}
+
+const send = (client: TelegramClient, chatId: number, r: Reply): Promise<void> =>
+  r.keyboard ? client.sendMessage(chatId, r.text, r.keyboard) : client.sendMessage(chatId, r.text);
+
+/** Erro do Telegram em arrumação (botão velho, mensagem sem mudança...): só registra. */
+async function bestEffort(fn: () => Promise<void>): Promise<void> {
+  try {
+    await fn();
+  } catch (err) {
+    console.error(`[telegram] ${err instanceof Error ? err.message : "erro ao arrumar mensagem"}`);
+  }
+}
+
+/**
+ * Toque num botão (callback_query). Mesmas regras de código de retorno da mensagem: pedido inválido
+ * responde 200 com aviso; falha transitória responde 500 (o toque é reenviado e criar é idempotente).
+ */
+async function handleCallback(
+  cq: TelegramCallbackQuery,
+  config: TelegramConfig,
+  client: TelegramClient,
+  deps: Omit<WebhookDeps, "config" | "client">,
+): Promise<APIGatewayProxyResultV2> {
+  const message = cq.message;
+  // Sem mensagem, ou de chat não autorizado: ignora em silêncio.
+  if (!message || !config.allowedChatIds.includes(message.chat.id)) return reply(200);
+
+  let outcome: CallbackOutcome;
+  try {
+    outcome = await answerByCallback(cq, deps);
+  } catch (err) {
+    const described = describeError(err);
+    if (described.kind === "retry") return reply(500);
+    outcome = { toast: described.text };
+  }
+
+  try {
+    await client.answerCallbackQuery(cq.id, outcome.toast);
+    if (outcome.send) await send(client, message.chat.id, outcome.send);
+  } catch (err) {
+    if (err instanceof TelegramApiError) {
+      console.error(`[telegram] ${err.message}`);
+      // 4xx (ex.: "query is too old"): reenviar não adianta.
+      if (err.retryable) return reply(500);
+    } else {
+      console.error("[hermes] erro inesperado ao responder o botão", err);
+      return reply(500);
+    }
+  }
+  if (outcome.closes) await bestEffort(() => client.editMessageText(message.chat.id, outcome.closes!.messageId, outcome.closes!.text));
   return reply(200);
 }
 

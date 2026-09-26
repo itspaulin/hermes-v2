@@ -39,7 +39,7 @@ function rig(nowIso = "2026-09-25T18:10:00Z", gh = new FakeGitHub(), store?: Vau
     );
   const handler = createHandler({
     config: { botToken: "tok", webhookSecret: SECRET, allowedChatIds: [CHAT] },
-    client: { sendMessage: async (_c, t) => void replies.push(t) },
+    client: { sendMessage: async (_c, t) => void replies.push(t), answerCallbackQuery: async () => {}, editMessageText: async () => {} },
     clock,
     ...makeRepos(real, clock),
   });
@@ -334,7 +334,7 @@ describe("8. GitHub indisponível: 500 para o Telegram reenviar", () => {
     const hangStore = createGitHubVaultStore({ owner: "o", repo: "r", branch: "main", token: GH_TOKEN }, { fetch: hang, timeoutMs: 20 });
     const handler = createHandler({
       config: { botToken: "tok", webhookSecret: SECRET, allowedChatIds: [CHAT] },
-      client: { sendMessage: async (_c, t) => void replies.push(t) },
+      client: { sendMessage: async (_c, t) => void replies.push(t), answerCallbackQuery: async () => {}, editMessageText: async () => {} },
       clock,
       ...makeRepos(hangStore, clock),
     });
@@ -481,6 +481,7 @@ describe("outros erros do usuário/Vault viram resposta 200", () => {
           if (telegramDown) throw new TelegramApiError("x", 502);
           replies.push(t);
         },
+        answerCallbackQuery: async () => {}, editMessageText: async () => {},
       },
       clock,
       ...makeRepos(ghStore, clock),

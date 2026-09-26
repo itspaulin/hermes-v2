@@ -120,6 +120,12 @@ export function weekOf(date: LocalDate): Week {
   return { start, end: days[6]!, days };
 }
 
+/** Semana ISO 8601 da data, no formato dos arquivos de revisão: "2026-W39" (semana começa na segunda). */
+export function isoWeekLabel(date: LocalDate): string {
+  const dt = utcDate(date);
+  return `${dt.weekYear}-W${String(dt.weekNumber).padStart(2, "0")}`;
+}
+
 export function currentWeek(clock: Clock): Week {
   return weekOf(today(clock));
 }

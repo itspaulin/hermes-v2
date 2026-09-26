@@ -2,6 +2,9 @@ import { timingSafeEqual } from "node:crypto";
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda";
 import type { Clock } from "../time/index.js";
 import { TelegramApiError, type TelegramClient } from "./client.js";
+import { AnswerValidationError } from "../domain/answer.js";
+import { CheckinNotFound, type CheckinRepository } from "../domain/checkin-repository.js";
+import { ReviewNotFound, type ReviewRepository } from "../domain/review-repository.js";
 import { MetaNotFound, MetaValidationError, type MetaRepository } from "../domain/meta-repository.js";
 import { TaskNotFound, TaskValidationError, type TaskRepository } from "../domain/task-repository.js";
 import { VaultApiError, VaultConflict, VaultInvalidNote, VaultUnavailable } from "../vault/errors.js";
@@ -14,6 +17,8 @@ export interface WebhookDeps {
   clock: Clock;
   tasks: TaskRepository;
   metas: MetaRepository;
+  checkins: CheckinRepository;
+  reviews: ReviewRepository;
 }
 
 const SECRET_HEADER = "x-telegram-bot-api-secret-token";
@@ -53,7 +58,7 @@ function parseUpdate(event: APIGatewayProxyEventV2): TelegramUpdate | null {
  */
 export async function handleWebhook(
   event: APIGatewayProxyEventV2,
-  { config, client, clock, tasks, metas }: WebhookDeps,
+  { config, client, clock, tasks, metas, checkins, reviews }: WebhookDeps,
 ): Promise<APIGatewayProxyResultV2> {
   if (!secretMatches(event.headers?.[SECRET_HEADER], config.webhookSecret)) {
     return reply(401);
@@ -70,7 +75,7 @@ export async function handleWebhook(
 
   let text: string;
   try {
-    text = await routeMessage(message.text, message.date, { clock, tasks, metas });
+    text = await routeMessage(message.text, message.date, { clock, tasks, metas, checkins, reviews });
   } catch (err) {
     const outcome = describeError(err);
     if (outcome.kind === "retry") return reply(500);
@@ -96,6 +101,9 @@ export async function handleWebhook(
  */
 function describeError(err: unknown): { kind: "reply"; text: string } | { kind: "retry" } {
   if (err instanceof TaskValidationError) return { kind: "reply", text: err.message };
+  if (err instanceof AnswerValidationError) return { kind: "reply", text: err.message };
+  if (err instanceof CheckinNotFound) return { kind: "reply", text: "Check-in não encontrado." };
+  if (err instanceof ReviewNotFound) return { kind: "reply", text: "Revisão não encontrada." };
   if (err instanceof MetaValidationError) return { kind: "reply", text: err.message };
   if (err instanceof MetaNotFound) return { kind: "reply", text: "Meta não encontrada." };
   if (err instanceof TaskNotFound) return { kind: "reply", text: "Tarefa não encontrada." };

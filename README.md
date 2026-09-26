@@ -2,7 +2,7 @@
 
 Bot de metas, tarefas, check-ins e acompanhamento. Telegram é a interface, o Obsidian Vault (via GitHub) é a fonte de verdade, AWS executa.
 
-Status: no ar na AWS. Telegram (`/start`, `/ping`), tarefas (`/tarefa`, `/feita`, `/cancelar`), listagens (`/hoje`, `/semana`) e metas (`/meta`, `/metas`, `/metafeita`, `/metacancelar`), gravadas no Vault via GitHub. Check-ins e Scheduler ainda não existem.
+Status: no ar na AWS. Telegram (`/start`, `/ping`), tarefas (`/tarefa`, `/feita`, `/cancelar`), listagens (`/hoje`, `/semana`) e metas (`/meta`, `/metas`, `/metafeita`, `/metacancelar`), gravadas no Vault via GitHub. Check-ins agendados (EventBridge Scheduler) e revisão semanal, com `/checkin`, `/metrica` e `/revisao`.
 
 ## Arquitetura
 
@@ -65,8 +65,24 @@ Respostas do webhook: 401 secret errado, 400 payload inválido, 200 ignorado/res
 /metas                               # metas ativas com a contagem de tarefas pendentes
 /metafeita <id-ou-trecho>
 /metacancelar <id-ou-trecho>
+/checkin <texto>                     # responde ao check-in diário mais recente sem resposta
+/metrica <texto>                     # responde às métricas da quinta
+/revisao <texto>                     # responde à revisão semanal
 /start   /ping
 ```
+
+## Agenda (EventBridge Scheduler)
+
+Definida em `src/config.ts`; `template.yaml` tem um schedule por entrada (fuso `America/Sao_Paulo`) e `test/template.test.ts` garante que os dois batem. Cada schedule invoca a mesma Lambda com `{"kind": ...}`, que cria a nota do slot no Vault (criar-se-não-existir) e avisa no Telegram.
+
+| Quando | O quê | Nota |
+|---|---|---|
+| seg, ter, qua, sex 14h | check-in: contagens (hoje, atrasadas, próximas 7 dias) e a pergunta | `checkins/AAAA/AAAA-MM-DD-checkin.md` |
+| qui 14h | métricas calculadas da semana (criadas, concluídas, canceladas, pendentes, atrasadas, por dia, por meta) | `checkins/AAAA/AAAA-MM-DD-metrics.md` |
+| sáb 18h | revisão: resumo da semana, check-ins e métricas manuais | `revisoes/AAAA-Wxx.md` |
+| dom | nada automático | |
+
+O Hermes registra fatos; não julga se a semana foi boa. A resposta vai no campo `answer` do frontmatter (o corpo é seu). Falha no Vault ou no Telegram repete até 2 vezes; como criar é idempotente, a repetição só reenvia a mensagem. Slot já respondido não é reenviado. Teste manual fora do calendário: invocar a Lambda com `{"kind":"checkin","force":true}`.
 
 - O ID da meta é o slug do título (sem data): o mesmo título é a mesma meta. Uma tarefa com `#meta` grava `meta:` no frontmatter e um wikilink `[[meta]]` no corpo; a meta precisa existir, senão a tarefa não é criada.
 

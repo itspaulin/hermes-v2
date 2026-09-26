@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MetaRepository } from "../src/domain/meta-repository.js";
-import { TaskRepository } from "../src/domain/task-repository.js";
+import { makeRepos } from "./support/repos.js";
 import { routeMessage } from "../src/telegram/router.js";
 import { parseTarefaArgs } from "../src/telegram/task-commands.js";
 import { fakeClock } from "../src/time/index.js";
@@ -13,7 +12,7 @@ function setup() {
   const clock = fakeClock("2026-09-25T18:10:00Z");
   const mem = new InMemoryVaultStore();
   const store = guardVaultStore(mem);
-  const deps = { clock, tasks: new TaskRepository(store, clock), metas: new MetaRepository(store, clock) };
+  const deps = { clock, ...makeRepos(store, clock) };
   const say = (text: string) => routeMessage(text, EVENT, deps);
   return { mem, say, ...deps };
 }

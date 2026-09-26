@@ -68,8 +68,9 @@ Campos por tipo:
 
 - **tarefa:** `due` (`LocalDate`, opcional), `meta` (ID de meta, opcional), `done_at` (instante, definido só na primeira transição para `feita`). Status: `pendente`, `feita`, `cancelada`.
 - **meta:** `due` (`LocalDate`, opcional). Status: `ativa`, `concluida`, `pausada`, `cancelada`.
-- **checkin:** `date` (`LocalDate`), `kind` (`checkin`, `metrics`), `answered_at` (instante, opcional). Detalhes das respostas serão definidos na etapa de check-ins, sempre com semântica de set.
-- **revisao:** `week` (`2026-W39`), `week_start` (`LocalDate`).
+- **checkin:** `date` (`LocalDate`), `kind` (`checkin` = diário, `metrics` = quinta), `answer` (texto, opcional), `answered_at` (instante, opcional). O corpo é criado pelo Hermes com o **contexto calculado** (contagens do dia ou métricas da semana) e daí em diante é do usuário.
+- **revisao:** `week` (`2026-W39`), `week_start` (`LocalDate`, a segunda-feira), `answer`, `answered_at`. O corpo traz o resumo da semana (tarefas, metas, check-ins, métricas manuais) na criação, sábado 18h. O arquivo é plano em `revisoes/` (sem pasta de ano).
+- **`answer`** (check-in e revisão): a resposta do usuário pelo Telegram (`/checkin`, `/metrica`, `/revisao`), sempre **uma linha** (quebras viram espaço, máximo 1000 caracteres), guardada no frontmatter para o Hermes nunca reescrever o corpo. Uma segunda resposta diferente é **acrescentada** com ` | ` (nada é perdido); repetir o mesmo texto é no-op. `answered_at` só é definido na primeira resposta.
 
 Regras de tipos de data: instantes sempre com offset (gerados pelo módulo de tempo); dias inteiros sempre `AAAA-MM-DD`. Um valor de data inválido numa nota (edição manual) torna **aquela nota** inválida para o Hermes, não derruba as outras (ver seção 8).
 

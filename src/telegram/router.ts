@@ -1,7 +1,10 @@
+import type { CheckinRepository } from "../domain/checkin-repository.js";
+import type { ReviewRepository } from "../domain/review-repository.js";
 import type { MetaRepository } from "../domain/meta-repository.js";
 import type { TaskRepository } from "../domain/task-repository.js";
 import { nowIso, type Clock } from "../time/index.js";
 import { cmdHoje, cmdSemana } from "./list-commands.js";
+import { cmdResponderCheckin, cmdRevisao } from "./report-commands.js";
 import { cmdMeta, cmdMetas, cmdMudarStatusMeta } from "./meta-commands.js";
 import { cmdMudarStatus, cmdTarefa } from "./task-commands.js";
 
@@ -9,9 +12,11 @@ export interface RouterDeps {
   clock: Clock;
   tasks: TaskRepository;
   metas: MetaRepository;
+  checkins: CheckinRepository;
+  reviews: ReviewRepository;
 }
 
-const COMMANDS_HELP = "Comandos: /tarefa, /feita, /cancelar, /hoje, /semana, /meta, /metas, /metafeita, /metacancelar, /ping";
+const COMMANDS_HELP = "Comandos: /tarefa, /feita, /cancelar, /hoje, /semana, /meta, /metas, /metafeita, /metacancelar, /checkin, /metrica, /revisao, /ping";
 const COMMAND_RE = /^\/([a-zA-Z0-9_]+)(?:@[a-zA-Z0-9_]+)?(?:\s+([\s\S]*))?$/;
 
 /** Comando e argumentos de um texto "/comando args", ou null se não começa com "/comando". */
@@ -32,7 +37,7 @@ export function parseCommand(text: string): string | null {
 export async function routeMessage(
   text: string,
   eventEpochSeconds: number | undefined,
-  { clock, tasks, metas }: RouterDeps,
+  { clock, tasks, metas, checkins, reviews }: RouterDeps,
 ): Promise<string> {
   const cmd = parseCommandLine(text);
   if (!cmd) return `Envie um comando. ${COMMANDS_HELP}`;
@@ -56,6 +61,12 @@ export async function routeMessage(
       return cmdMudarStatusMeta("concluida", cmd.args, metas);
     case "metacancelar":
       return cmdMudarStatusMeta("cancelada", cmd.args, metas);
+    case "checkin":
+      return cmdResponderCheckin("checkin", cmd.args, checkins, clock);
+    case "metrica":
+      return cmdResponderCheckin("metrics", cmd.args, checkins, clock);
+    case "revisao":
+      return cmdRevisao(cmd.args, reviews, clock);
     case "hoje":
       return cmdHoje(tasks, clock);
     case "semana":

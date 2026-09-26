@@ -134,6 +134,12 @@ export class TaskRepository {
   }
 
   async listPending(): Promise<PendingListing> {
+    const { tasks, skipped } = await this.listAll();
+    return { tasks: tasks.filter((t) => t.status === "pendente"), skipped };
+  }
+
+  /** Tarefas de qualquer status (para estatísticas). Mesma ordenação de listPending. */
+  async listAll(): Promise<PendingListing> {
     const paths = await this.store.list(TASKS_DIR);
     const tasks: Task[] = [];
     const skipped: PendingListing["skipped"] = [];
@@ -155,7 +161,7 @@ export class TaskRepository {
           }
         }),
       );
-      for (const t of results) if (t && t.status === "pendente") tasks.push(t);
+      for (const t of results) if (t) tasks.push(t);
     }
 
     tasks.sort(compareTasks);

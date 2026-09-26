@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createHandler } from "../src/handler.js";
-import { MetaRepository } from "../src/domain/meta-repository.js";
+import { makeRepos } from "./support/repos.js";
 import { TaskRepository } from "../src/domain/task-repository.js";
 import { matchPending } from "../src/domain/task-resolve.js";
 import { parseTask, taskPath, type Task } from "../src/domain/task.js";
@@ -41,8 +41,7 @@ function rig(nowIso = "2026-09-25T18:10:00Z", gh = new FakeGitHub(), store?: Vau
     config: { botToken: "tok", webhookSecret: SECRET, allowedChatIds: [CHAT] },
     client: { sendMessage: async (_c, t) => void replies.push(t) },
     clock,
-    tasks: new TaskRepository(real, clock),
-    metas: new MetaRepository(real, clock),
+    ...makeRepos(real, clock),
   });
   let updateId = 0;
   return {
@@ -337,8 +336,7 @@ describe("8. GitHub indisponível: 500 para o Telegram reenviar", () => {
       config: { botToken: "tok", webhookSecret: SECRET, allowedChatIds: [CHAT] },
       client: { sendMessage: async (_c, t) => void replies.push(t) },
       clock,
-      tasks: new TaskRepository(hangStore, clock),
-      metas: new MetaRepository(hangStore, clock),
+      ...makeRepos(hangStore, clock),
     });
     const res = (await handler({
       headers: { "x-telegram-bot-api-secret-token": SECRET },
@@ -485,8 +483,7 @@ describe("outros erros do usuário/Vault viram resposta 200", () => {
         },
       },
       clock,
-      tasks: new TaskRepository(ghStore, clock),
-      metas: new MetaRepository(ghStore, clock),
+      ...makeRepos(ghStore, clock),
     });
     const ev = () => ({
       headers: { "x-telegram-bot-api-secret-token": SECRET },

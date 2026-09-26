@@ -160,3 +160,15 @@ describe("instantes", () => {
     expect(today(fakeClock("2018-11-04T03:30:00Z"))).toBe("2018-11-04");
   });
 });
+
+describe("isoWeekLabel", () => {
+  it("usa a semana ISO, com virada de ano", async () => {
+    const { isoWeekLabel, parseLocalDate } = await import("../src/time/index.js");
+    expect(isoWeekLabel(parseLocalDate("2026-09-21"))).toBe("2026-W39");
+    expect(isoWeekLabel(parseLocalDate("2026-09-27"))).toBe("2026-W39");
+    expect(isoWeekLabel(parseLocalDate("2026-09-28"))).toBe("2026-W40");
+    expect(isoWeekLabel(parseLocalDate("2026-01-01"))).toBe("2026-W01");
+    expect(isoWeekLabel(parseLocalDate("2027-01-01"))).toBe("2026-W53");
+    expect(isoWeekLabel(parseLocalDate("2024-12-30"))).toBe("2025-W01");
+  });
+});

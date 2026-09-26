@@ -3,8 +3,8 @@ import { createHandler } from "../src/handler.js";
 import { createTelegramClient, TelegramApiError, type TelegramClient } from "../src/telegram/client.js";
 import { loadTelegramConfig, telegramParamNamesFromEnv } from "../src/telegram/config.js";
 import { createSsmReader, type ParameterReader } from "../src/ssm.js";
+import { makeRepos } from "./support/repos.js";
 import { parseCommand, routeMessage } from "../src/telegram/router.js";
-import { MetaRepository } from "../src/domain/meta-repository.js";
 import { TaskRepository } from "../src/domain/task-repository.js";
 import { InMemoryVaultStore } from "../src/vault/memory-store.js";
 import { guardVaultStore } from "../src/vault/store.js";
@@ -21,8 +21,7 @@ function setup(sendMessage: TelegramClient["sendMessage"] = async () => {}) {
     config: { botToken: "tok", webhookSecret: SECRET, allowedChatIds: [ALLOWED] },
     client: { sendMessage: send },
     clock,
-    tasks: new TaskRepository(store, clock),
-    metas: new MetaRepository(store, clock),
+    ...makeRepos(store, clock),
   });
   return { send, handler };
 }
@@ -70,7 +69,7 @@ describe("allowlist de chat_id", () => {
 
 describe("comandos", () => {
   const store = guardVaultStore(new InMemoryVaultStore());
-  const deps = { clock, tasks: new TaskRepository(store, clock), metas: new MetaRepository(store, clock) };
+  const deps = { clock, ...makeRepos(store, clock) };
   const route = (text: string) => routeMessage(text, undefined, deps);
 
   it("/start", async () =>
@@ -88,7 +87,7 @@ describe("comandos", () => {
 
   it("comando desconhecido", async () => {
     expect(await route("/foo")).toContain("Comando desconhecido: /foo");
-    expect(await route("/foo")).toContain("/tarefa, /feita, /cancelar, /hoje, /semana, /meta, /metas, /metafeita, /metacancelar, /ping");
+    expect(await route("/foo")).toContain("/tarefa, /feita, /cancelar, /hoje, /semana, /meta, /metas, /metafeita, /metacancelar, /checkin, /metrica, /revisao, /ping");
   });
 
   it("mensagem sem comando", async () => {

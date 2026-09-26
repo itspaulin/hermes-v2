@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: Hermes v2 - fundação (Lambda + HTTP API)
+Description: Hermes v2 (Lambda + HTTP API + EventBridge Scheduler)
 
 Globals:
   Function:
@@ -76,6 +76,62 @@ Resources:
           Properties:
             Path: /telegram/webhook
             Method: POST
+        # Um schedule por entrada de src/config.ts (test/template.test.ts confere que os dois batem).
+        # Domingo é descanso: nenhum schedule. Falha repete no máximo 2 vezes em 1 h.
+        ScheduleMon:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: cron(0 14 ? * MON *)
+            ScheduleExpressionTimezone: America/Sao_Paulo
+            Input: '{"kind":"checkin"}'
+            RetryPolicy:
+              MaximumRetryAttempts: 2
+              MaximumEventAgeInSeconds: 3600
+        ScheduleTue:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: cron(0 14 ? * TUE *)
+            ScheduleExpressionTimezone: America/Sao_Paulo
+            Input: '{"kind":"checkin"}'
+            RetryPolicy:
+              MaximumRetryAttempts: 2
+              MaximumEventAgeInSeconds: 3600
+        ScheduleWed:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: cron(0 14 ? * WED *)
+            ScheduleExpressionTimezone: America/Sao_Paulo
+            Input: '{"kind":"checkin"}'
+            RetryPolicy:
+              MaximumRetryAttempts: 2
+              MaximumEventAgeInSeconds: 3600
+        ScheduleThu:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: cron(0 14 ? * THU *)
+            ScheduleExpressionTimezone: America/Sao_Paulo
+            Input: '{"kind":"metrics"}'
+            RetryPolicy:
+              MaximumRetryAttempts: 2
+              MaximumEventAgeInSeconds: 3600
+        ScheduleFri:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: cron(0 14 ? * FRI *)
+            ScheduleExpressionTimezone: America/Sao_Paulo
+            Input: '{"kind":"checkin"}'
+            RetryPolicy:
+              MaximumRetryAttempts: 2
+              MaximumEventAgeInSeconds: 3600
+        ScheduleSat:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: cron(0 18 ? * SAT *)
+            ScheduleExpressionTimezone: America/Sao_Paulo
+            Input: '{"kind":"weekly_review"}'
+            RetryPolicy:
+              MaximumRetryAttempts: 2
+              MaximumEventAgeInSeconds: 3600
 
 Outputs:
   WebhookUrl:

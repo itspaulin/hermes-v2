@@ -1,6 +1,9 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda";
+import { CheckinRepository } from "./domain/checkin-repository.js";
+import { ReviewRepository } from "./domain/review-repository.js";
 import { MetaRepository } from "./domain/meta-repository.js";
 import { TaskRepository } from "./domain/task-repository.js";
+import { parseScheduledEvent, runScheduled, type ScheduleDeps } from "./schedule/run.js";
 import { createSsmReader } from "./ssm.js";
 import { createTelegramClient } from "./telegram/client.js";
 import { loadTelegramConfig, telegramParamNamesFromEnv } from "./telegram/config.js";
@@ -15,10 +18,15 @@ export function createHandler(deps: WebhookDeps) {
     handleWebhook(event, deps);
 }
 
-// Cache do cold start: só otimização. Falha não é cacheada, a próxima invocação tenta de novo.
-let cached: Promise<ReturnType<typeof createHandler>> | undefined;
+type Route = {
+  http: ReturnType<typeof createHandler>;
+  schedule: (event: ReturnType<typeof parseScheduledEvent> & object) => Promise<string>;
+};
 
-async function build(): Promise<ReturnType<typeof createHandler>> {
+// Cache do cold start: só otimização. Falha não é cacheada, a próxima invocação tenta de novo.
+let cached: Promise<Route> | undefined;
+
+async function build(): Promise<Route> {
   const ssm = createSsmReader();
   // Telegram e Vault em paralelo: 4 GetParameter no total, só no cold start.
   const [config, vault] = await Promise.all([
@@ -26,20 +34,37 @@ async function build(): Promise<ReturnType<typeof createHandler>> {
     loadVaultConfig(ssm, process.env),
   ]);
   const store = createGitHubVaultStore(vault);
-  return createHandler({
-    config,
-    client: createTelegramClient(config.botToken),
-    clock: systemClock,
+  const client = createTelegramClient(config.botToken);
+  const repos = {
     tasks: new TaskRepository(store, systemClock),
     metas: new MetaRepository(store, systemClock),
-  });
+    checkins: new CheckinRepository(store, systemClock),
+    reviews: new ReviewRepository(store, systemClock),
+  };
+  const scheduleDeps: ScheduleDeps = { clock: systemClock, client, chatIds: config.allowedChatIds, ...repos };
+  return {
+    http: createHandler({ config, client, clock: systemClock, ...repos }),
+    schedule: (ev) => runScheduled(ev, scheduleDeps),
+  };
 }
 
-/** Export de produção: monta as dependências (SSM) na primeira invocação, não no import. */
-export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
+/**
+ * Export de produção. Dois tipos de evento na mesma Lambda: o webhook do Telegram (API Gateway)
+ * e os check-ins agendados (EventBridge Scheduler, `{"kind": ...}`). Dependências (SSM) são
+ * montadas na primeira invocação, não no import. Falha no agendado propaga: o Scheduler repete.
+ */
+export const handler = async (event: unknown): Promise<APIGatewayProxyResultV2 | string> => {
   cached ??= build().catch((err) => {
     cached = undefined;
     throw err;
   });
-  return (await cached)(event);
+  const route = await cached;
+
+  const scheduled = parseScheduledEvent(event);
+  if (scheduled) {
+    const outcome = await route.schedule(scheduled);
+    console.log(`[schedule] ${outcome}`);
+    return outcome;
+  }
+  return route.http(event as APIGatewayProxyEventV2);
 };

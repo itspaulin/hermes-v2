@@ -27,6 +27,11 @@ Parameters:
     Default: /hermes/prod/vault/github-token
     Description: Nome (não o valor) do parâmetro SecureString com o PAT fine-grained do Vault
 
+  RenatoSsmPrefix:
+    Type: String
+    Default: /renato/prod/telegram
+    Description: Prefixo dos parâmetros SecureString do bot independente do Renato
+
 Resources:
   HermesLogGroup:
     Type: AWS::Logs::LogGroup
@@ -132,6 +137,54 @@ Resources:
             RetryPolicy:
               MaximumRetryAttempts: 2
               MaximumEventAgeInSeconds: 3600
+
+  RenatoLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  RenatoFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Format: esm
+        Target: es2022
+        Sourcemap: false
+        Banner:
+          - js=import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);
+        EntryPoints: [renato/src/lambda.ts]
+        OutExtension: [.js=.mjs]
+    Properties:
+      Handler: lambda.handler
+      CodeUri: .
+      LoggingConfig:
+        LogGroup: !Ref RenatoLogGroup
+      Environment:
+        Variables:
+          RENATO_TELEGRAM_BOT_TOKEN_PARAM: !Sub "${RenatoSsmPrefix}/bot-token"
+          RENATO_TELEGRAM_WEBHOOK_SECRET_PARAM: !Sub "${RenatoSsmPrefix}/webhook-secret"
+          RENATO_TELEGRAM_ALLOWED_CHAT_IDS_PARAM: !Sub "${RenatoSsmPrefix}/allowed-chat-ids"
+          RENATO_VAULT_REPO: !Ref VaultRepo
+          RENATO_VAULT_BRANCH: !Ref VaultBranch
+          RENATO_VAULT_DIRECTORY: Renato/Notas
+          RENATO_VAULT_GITHUB_TOKEN_PARAM: !Ref VaultTokenParam
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action: ssm:GetParameter
+              Resource:
+                - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${RenatoSsmPrefix}/bot-token"
+                - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${RenatoSsmPrefix}/webhook-secret"
+                - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${RenatoSsmPrefix}/allowed-chat-ids"
+                - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${VaultTokenParam}"
+      Events:
+        RenatoTelegramWebhook:
+          Type: HttpApi
+          Properties:
+            Path: /renato/webhook
+            Method: POST
 
 Outputs:
   WebhookUrl:

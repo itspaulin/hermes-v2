@@ -96,6 +96,16 @@ await handle({
 
 Só `message` com `text` é tratada: sem comandos `/`, edições, canais, grupos específicos, anexos nem verificação do segredo do webhook (isso fica para o API Gateway/Lambda). Sem webhook público, sem resposta ao usuário, sem Vault.
 
+## Lambda/API Gateway e Bot API (REN-005)
+
+`src/lambda.ts` é o entrypoint HTTP do Renato. Ele valida o header `X-Telegram-Bot-Api-Secret-Token` com comparação em tempo constante, valida o método/caminho, limita a captura aos chat IDs configurados e só então encaminha o payload ao handler puro. A nota é persistida pela Contents API do GitHub no Vault; o bot envia confirmação depois da gravação. Reentregas do mesmo `chat.id/message_id` são idempotentes se o conteúdo original for igual.
+
+O template SAM define uma função `RenatoFunction` separada em `POST /renato/webhook`. Renato usa **um bot Telegram próprio**, porque o Telegram permite apenas um webhook por bot; não configure o mesmo bot-token no Hermes e no Renato. A infraestrutura foi descrita em código, mas não foi aplicada/deployada.
+
+Parâmetros SSM SecureString esperados pelo prefixo `RenatoSsmPrefix` (padrão `/renato/prod/telegram`): `bot-token`, `webhook-secret` e `allowed-chat-ids`. O último contém IDs numéricos separados por vírgula. O token do Vault usa o parâmetro já configurado por `VaultTokenParam`; `VaultRepo`, `VaultBranch` e a pasta `Renato/Notas` são configuração não secreta. O template concede à função somente `ssm:GetParameter` para esses parâmetros. A URL final do webhook aparece nas saídas do stack após um deploy autorizado.
+
+A confirmação é enviada após a gravação. Se a API do Telegram falhar depois de persistir, a Lambda retorna 500 para permitir reentrega; o ID determinístico e a verificação da nota existente evitam duplicação da mesma mensagem.
+
 ## Como rodar
 
 ```bash

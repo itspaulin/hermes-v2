@@ -48,7 +48,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          ACTION_CONCLUSION: ${{ steps.claude.outputs.conclusion }}
+          ACTION_CONCLUSION: ${{ steps.claude.outcome }}
           BRANCH_NAME: ${{ steps.claude.outputs.branch_name }}
           EXPECTED_BASE: integration/renato-002-004
         run: |

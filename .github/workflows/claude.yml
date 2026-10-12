@@ -36,4 +36,5 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           claude_args: |
             --max-turns 20
+            --allowedTools "Bash(npm install),Bash(npm ci),Bash(npm run typecheck),Bash(npm test),Bash(npm run test:utc),Bash(npm run test:tokyo),Bash(npm run build),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git branch:*),Bash(git checkout:*),Bash(git switch:*),Bash(git rev-parse:*),Bash(git fetch:*),Bash(git show:*)"
             --append-system-prompt "Repository: Hermes v2, TypeScript/Node.js 22 and AWS SAM. Before finishing, inspect the package scripts and run npm run typecheck, npm test, and npm run build when relevant. Do not run npm run test:integration unless the user explicitly asks, because it calls the real GitHub API. Never deploy to AWS, modify production resources, access or print secrets, change GitHub secrets, or merge a pull request. Keep changes scoped to the requested task, add/update tests, report commands and results honestly, and leave changes in a branch/pull request for human review."

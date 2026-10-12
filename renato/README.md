@@ -27,6 +27,12 @@ Esta pasta é uma base isolada: tem `package.json`, `tsconfig.json` e `vitest.co
 - `originalContent` nunca é alterado; `organizedContent` só existe quando difere do original.
 - Timestamps (`createdAt`/`updatedAt`) são instantes UTC em ISO 8601, vindos do `Clock`.
 
+### Formato Markdown da nota
+
+`src/markdown.ts` (`serializeNote`/`parseNote`) usa frontmatter com um metadado por linha (`chave: valor JSON`, YAML válido): `id`, `category` (ou `null`), `tags`, `project` (opcional), `source`, `sourceMessageId` (opcional), `createdAt`, `updatedAt`. Depois vêm `## Conteúdo original` e, só se existir, `## Conteúdo organizado`, cada um em bloco cercado por crases. A cerca é maior que qualquer sequência de crases do texto, então o conteúdo é preservado byte a byte. Metadados desconhecidos, duplicados ou ausentes, JSON inválido e conteúdo extra geram `NoteFormatError`; nada é descartado em silêncio. O formato não protege contra conversão externa de fim de linha (CRLF/LF).
+
+`src/repository.ts` define a interface `NoteRepository` (`create`, `update`, `get`, `list`) e `InMemoryNoteRepository`, que guarda o Markdown serializado e serve para testes. Não há acesso a rede, credenciais ou ao Vault real.
+
 ## Como rodar
 
 ```bash

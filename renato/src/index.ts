@@ -2,3 +2,5 @@ export * from "./types.js";
 export * from "./clock.js";
 export * from "./classify.js";
 export * from "./note.js";
+export * from "./markdown.js";
+export * from "./repository.js";

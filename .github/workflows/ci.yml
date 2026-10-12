@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [master, integration/renato-002-004]
+  push:
+    branches: [master, integration/renato-002-004]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Typecheck Hermes
+        run: npm run typecheck
+
+      - name: Test Hermes in UTC and Tokyo
+        run: npm test
+
+      - name: Install isolated Renato dependencies
+        run: npm --prefix renato install --no-audit --no-fund
+
+      - name: Typecheck Renato
+        run: npm --prefix renato run typecheck
+
+      - name: Test Renato in UTC and Tokyo
+        run: npm --prefix renato test
+
+      - name: Set up AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+
+      - name: Build SAM application
+        run: npm run build

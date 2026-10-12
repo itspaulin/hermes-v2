@@ -189,3 +189,5 @@ Resources:
 Outputs:
   WebhookUrl:
     Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com/telegram/webhook"
+  RenatoWebhookUrl:
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com/renato/webhook"

@@ -94,7 +94,7 @@ await handle({
 
 ### Limites
 
-Só `message` com `text` é tratada: sem comandos `/`, edições, canais, grupos específicos, anexos nem verificação do segredo do webhook (isso fica para o API Gateway/Lambda). Sem webhook público, sem resposta ao usuário, sem Vault.
+A camada pura só trata `message` com `text`; edições, canais e anexos são ignorados. Verificação do segredo do webhook, allowlist de chats, persistência no Vault e resposta ao usuário ficam na camada Lambda descrita abaixo.
 
 ## Lambda/API Gateway e Bot API (REN-005)
 

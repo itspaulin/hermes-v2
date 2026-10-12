@@ -31,10 +31,44 @@ jobs:
           fetch-depth: 1
 
       - name: Run Claude Code
+        id: claude
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # REN-005 must branch from REN-004; all other tasks keep the repo default.
+          base_branch: ${{ (github.event_name == 'issues' || github.event_name == 'issue_comment') && github.event.issue.number == 10 && 'claude/issue-9-20261012-1737' || '' }}
           claude_args: |
             --max-turns 20
             --allowedTools "Bash(npm install),Bash(npm ci),Bash(npm run typecheck),Bash(npm test),Bash(npm run test:utc),Bash(npm run test:tokyo),Bash(npm run build),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git branch:*),Bash(git checkout:*),Bash(git switch:*),Bash(git rev-parse:*),Bash(git fetch:*),Bash(git show:*)"
-            --append-system-prompt "Repository: Hermes v2, TypeScript/Node.js 22 and AWS SAM. Before finishing, inspect the package scripts and run npm run typecheck, npm test, and npm run build when relevant. Do not run npm run test:integration unless the user explicitly asks, because it calls the real GitHub API. Never deploy to AWS, modify production resources, access or print secrets, change GitHub secrets, or merge a pull request. Keep changes scoped to the requested task, add/update tests, report commands and results honestly, and leave changes in a branch/pull request for human review."
+            --append-system-prompt "Repository: Hermes v2, TypeScript/Node.js 22 and AWS SAM. Before finishing, inspect the package scripts and run npm run typecheck, npm test, and npm run build when relevant. Do not run npm run test:integration unless the user explicitly asks, because it calls the real GitHub API. Never deploy to AWS, modify production resources, access or print secrets, change GitHub secrets, or merge a pull request. Keep changes scoped to the requested task, add/update tests, report commands and results honestly, and leave changes in a branch/pull request for human review. For issue #10 (REN-005), use the branch created by this action, verify it is based on claude/issue-9-20261012-1737, and open the PR against that same base; do not try to create a second branch with a hard-coded name."
+
+      # REN-005 is the first task using the explicit base. Fail visibly if the action
+      # did not push a branch and open a PR against REN-004.
+      - name: Verify REN-005 branch and pull request
+        if: always() && (github.event_name == 'issues' || github.event_name == 'issue_comment') && github.event.issue.number == 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ACTION_CONCLUSION: ${{ steps.claude.outputs.conclusion }}
+          BRANCH_NAME: ${{ steps.claude.outputs.branch_name }}
+          EXPECTED_BASE: claude/issue-9-20261012-1737
+        run: |
+          set -euo pipefail
+          if [ "$ACTION_CONCLUSION" != "success" ]; then
+            echo "Claude action did not report success (conclusion: ${ACTION_CONCLUSION:-empty})."
+            exit 1
+          fi
+          if [ -z "$BRANCH_NAME" ]; then
+            echo "Claude action did not return a branch_name output."
+            exit 1
+          fi
+          if ! gh api "repos/$GH_REPO/branches/$BRANCH_NAME" >/dev/null; then
+            echo "Expected branch was not found on GitHub: $BRANCH_NAME"
+            exit 1
+          fi
+          PR_URL=$(gh pr list --repo "$GH_REPO" --head "$BRANCH_NAME" --base "$EXPECTED_BASE" --state open --json url --jq '.[0].url // empty')
+          if [ -z "$PR_URL" ]; then
+            echo "No open pull request found from $BRANCH_NAME to $EXPECTED_BASE."
+            exit 1
+          fi
+          echo "Verified REN-005 branch and pull request: $PR_URL"

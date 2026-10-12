@@ -1,6 +1,6 @@
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { timingSafeEqual } from "node:crypto";
-import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda";
+import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-lambda";
 import { createTelegramHandler, type HttpResponse } from "./handler.js";
 import { systemClock } from "./clock.js";
 import { GitHubNoteRepository, type HttpClient } from "./github-repository.js";
@@ -15,7 +15,7 @@ export interface RenatoWebhookDeps {
   sendMessage(chatId: number, text: string): Promise<void>;
 }
 
-const response = (statusCode: number, body = ""): APIGatewayProxyResultV2 => ({
+const response = (statusCode: number, body = ""): APIGatewayProxyStructuredResultV2 => ({
   statusCode,
   headers: { "content-type": "text/plain; charset=utf-8" },
   body,
@@ -50,7 +50,7 @@ function chatIdFrom(payload: unknown): number | undefined {
 
 /** HTTP boundary, independently testable without AWS, Telegram or GitHub credentials. */
 export function createRenatoWebhookHandler(deps: RenatoWebhookDeps) {
-  return async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
+  return async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyStructuredResultV2> => {
     const method = event.requestContext.http.method;
     const path = event.rawPath;
     if (method !== "POST" || path !== "/renato/webhook") return response(404);
@@ -206,7 +206,7 @@ async function buildProductionHandler() {
 let cachedHandler: ReturnType<typeof createRenatoWebhookHandler> | undefined;
 
 /** SAM/Lambda entrypoint. Secrets/config are read only at invocation time, never at module import. */
-export async function handler(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+export async function handler(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyStructuredResultV2> {
   cachedHandler ??= await buildProductionHandler();
   return cachedHandler(event);
 }

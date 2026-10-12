@@ -6,4 +6,5 @@ export * from "./markdown.js";
 export * from "./repository.js";
 export * from "./github-repository.js";
 export * from "./telegram.js";
-export * from "./handler.js";
+export { createTelegramHandler } from "./handler.js";
+export type { CaptureNoteCommand, TelegramHandlerDeps, IgnoreReason, HandlerBody, HttpResponse as TelegramHandlerResponse } from "./handler.js";

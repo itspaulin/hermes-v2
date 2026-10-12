@@ -4,3 +4,4 @@ export * from "./classify.js";
 export * from "./note.js";
 export * from "./markdown.js";
 export * from "./repository.js";
+export * from "./github-repository.js";

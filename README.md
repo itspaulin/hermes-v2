@@ -22,8 +22,10 @@ src/
   config.ts      horários de check-in/métricas/revisão (editar aqui)
   time/          ÚNICO módulo que sabe "agora", "hoje", "amanhã", semana e tempo de evento
   vault/         VaultStore, InMemoryVaultStore, guarda de caminhos, frontmatter cirúrgico, slug
+  ai/            conversa natural do Hermes (prompt + ações permitidas); serviço comum em shared/ai/
   domain/        tarefas (TaskRepository) sobre VaultStore; não conhece Telegram nem GitHub
 test/
+shared/ai/       serviço Bedrock compartilhado (Hermes e Renato); ver docs/ai-conversation.md
 template.yaml    SAM: 1 Lambda + HTTP API
 docs/
 ```

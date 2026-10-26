@@ -3,6 +3,7 @@ import type { ReviewRepository } from "../domain/review-repository.js";
 import type { MetaRepository } from "../domain/meta-repository.js";
 import type { TaskRepository } from "../domain/task-repository.js";
 import { nowIso, type Clock } from "../time/index.js";
+import type { HermesConversation } from "../ai/hermes.js";
 import { answerByText } from "./meta-answer.js";
 import type { RouteResult } from "./reply.js";
 import type { TelegramMessage } from "./types.js";
@@ -17,6 +18,8 @@ export interface RouterDeps {
   metas: MetaRepository;
   checkins: CheckinRepository;
   reviews: ReviewRepository;
+  /** Conversa natural para texto solto. Ausente = IA desligada: o texto solto recebe só a ajuda. */
+  converse?: HermesConversation;
 }
 
 const COMMANDS_HELP = "Comandos: /tarefa, /feita, /cancelar, /hoje, /semana, /meta, /metas, /metafeita, /metacancelar, /checkin, /metrica, /revisao, /ping";
@@ -40,14 +43,15 @@ export function parseCommand(text: string): string | null {
 export async function routeMessage(
   text: string,
   eventEpochSeconds: number | undefined,
-  { clock, tasks, metas, checkins, reviews }: RouterDeps,
+  { clock, tasks, metas, checkins, reviews, converse }: RouterDeps,
   replyTo?: TelegramMessage,
 ): Promise<RouteResult> {
   const cmd = parseCommandLine(text);
   if (!cmd) {
     // Texto solto só tem contexto se for resposta (reply) a uma pergunta do próprio Hermes.
     const answered = replyTo ? await answerByText(text, replyTo, { clock, tasks, metas }) : null;
-    return answered ?? `Envie um comando. ${COMMANDS_HELP}`;
+    if (answered) return answered;
+    return converse ? converse(text, eventEpochSeconds) : `Envie um comando. ${COMMANDS_HELP}`;
   }
 
   switch (cmd.name) {

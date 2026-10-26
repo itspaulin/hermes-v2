@@ -1,7 +1,11 @@
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { timingSafeEqual } from "node:crypto";
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-lambda";
+import { createBedrockConverse } from "../../shared/ai/bedrock.js";
+import { loadAiConfig } from "../../shared/ai/config.js";
 import { createTelegramHandler, type HttpResponse } from "./handler.js";
+import { createRenatoAi, createRenatoConversation, explicitCapture, HELP_TEXT, CAPTURE_COMMAND, type RenatoConversation } from "./conversation.js";
+import { parseTelegramUpdate } from "./telegram.js";
 import { systemClock } from "./clock.js";
 import { GitHubNoteRepository, type HttpClient } from "./github-repository.js";
 import type { NoteRepository } from "./repository.js";
@@ -13,6 +17,11 @@ export interface RenatoWebhookDeps {
   allowedChatIds: ReadonlySet<number>;
   handleUpdate(payload: unknown): Promise<HttpResponse>;
   sendMessage(chatId: number, text: string): Promise<void>;
+  /**
+   * Conversa natural. Ausente = IA desligada: todo texto é capturado como nota (comportamento original).
+   * Presente: só captura pedido explícito (`/anotar`, marcador de categoria ou pedido reconhecido pelo modelo).
+   */
+  conversation?: RenatoConversation;
 }
 
 const response = (statusCode: number, body = ""): APIGatewayProxyStructuredResultV2 => ({
@@ -48,6 +57,21 @@ function chatIdFrom(payload: unknown): number | undefined {
   return typeof id === "number" && Number.isSafeInteger(id) ? id : undefined;
 }
 
+/** Cópia do update com outro texto na mensagem (ex.: sem o prefixo "/anotar"). */
+function withText(payload: unknown, text: string): unknown {
+  const update = payload as { message: Record<string, unknown> };
+  return { ...update, message: { ...update.message, text } };
+}
+
+async function replyOnly(deps: RenatoWebhookDeps, chatId: number, text: string): Promise<APIGatewayProxyStructuredResultV2> {
+  try {
+    await deps.sendMessage(chatId, text);
+  } catch {
+    return response(500);
+  }
+  return response(200, "ok");
+}
+
 /** HTTP boundary, independently testable without AWS, Telegram or GitHub credentials. */
 export function createRenatoWebhookHandler(deps: RenatoWebhookDeps) {
   return async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyStructuredResultV2> => {
@@ -65,7 +89,26 @@ export function createRenatoWebhookHandler(deps: RenatoWebhookDeps) {
     const chatId = chatIdFrom(payload);
     if (chatId !== undefined && !deps.allowedChatIds.has(chatId)) return response(200);
 
-    const result = await deps.handleUpdate(payload);
+    let capturePayload: unknown = payload;
+    if (deps.conversation) {
+      const parsed = parseTelegramUpdate(payload);
+      const text = parsed.kind === "message" ? parsed.message.text : undefined;
+      if (parsed.kind === "message" && text !== undefined && text.trim() !== "") {
+        const explicit = explicitCapture(text);
+        if (explicit !== null) {
+          capturePayload = withText(payload, explicit);
+        } else {
+          const say = (reply: string) => replyOnly(deps, parsed.message.chat.id, reply);
+          if (text.trim().toLowerCase().split(/[\s@]/)[0] === CAPTURE_COMMAND) return say(`Uso: ${CAPTURE_COMMAND} <texto>`);
+          if (text.trim().startsWith("/")) return say(HELP_TEXT);
+          const turn = await deps.conversation(text);
+          if (turn.kind === "say") return say(turn.text);
+          // Pedido de captura reconhecido pelo modelo: grava a mensagem original, sem reescrita.
+        }
+      }
+    }
+
+    const result = await deps.handleUpdate(capturePayload);
     if (result.statusCode !== 200 || result.body.status !== "accepted") {
       return response(result.statusCode);
     }
@@ -195,7 +238,13 @@ async function buildProductionHandler() {
       await repository.create(note);
     },
   });
+  // IA opcional: desligada (padrão) ou mal configurada, o Renato mantém a captura original.
+  const aiConfig = loadAiConfig(process.env);
+  const conversation = aiConfig
+    ? createRenatoConversation(createRenatoAi(aiConfig, createBedrockConverse(aiConfig.region)))
+    : undefined;
   return createRenatoWebhookHandler({
+    ...(conversation && { conversation }),
     webhookSecret: config.webhookSecret,
     allowedChatIds: config.allowedChatIds,
     handleUpdate: telegramHandler,

@@ -10,6 +10,7 @@ import { TaskNotFound, TaskValidationError, type TaskRepository } from "../domai
 import { VaultApiError, VaultConflict, VaultInvalidNote, VaultUnavailable } from "../vault/errors.js";
 import { answerByCallback, type CallbackOutcome } from "./meta-answer.js";
 import { asReply, type Reply } from "./reply.js";
+import type { HermesConversation } from "../ai/hermes.js";
 import { routeMessage } from "./router.js";
 import type { TelegramCallbackQuery, TelegramConfig, TelegramUpdate } from "./types.js";
 
@@ -21,6 +22,7 @@ export interface WebhookDeps {
   metas: MetaRepository;
   checkins: CheckinRepository;
   reviews: ReviewRepository;
+  converse?: HermesConversation;
 }
 
 const SECRET_HEADER = "x-telegram-bot-api-secret-token";
@@ -60,7 +62,7 @@ function parseUpdate(event: APIGatewayProxyEventV2): TelegramUpdate | null {
  */
 export async function handleWebhook(
   event: APIGatewayProxyEventV2,
-  { config, client, clock, tasks, metas, checkins, reviews }: WebhookDeps,
+  { config, client, clock, tasks, metas, checkins, reviews, converse }: WebhookDeps,
 ): Promise<APIGatewayProxyResultV2> {
   if (!secretMatches(event.headers?.[SECRET_HEADER], config.webhookSecret)) {
     return reply(401);
@@ -70,6 +72,7 @@ export async function handleWebhook(
   if (!update) return reply(400);
 
   const deps = { clock, tasks, metas, checkins, reviews };
+  const routeDeps = converse ? { ...deps, converse } : deps;
   if (update.callback_query) return handleCallback(update.callback_query, config, client, deps);
 
   const message = update.message;
@@ -80,7 +83,7 @@ export async function handleWebhook(
 
   let result: Reply;
   try {
-    result = asReply(await routeMessage(message.text, message.date, deps, message.reply_to_message));
+    result = asReply(await routeMessage(message.text, message.date, routeDeps, message.reply_to_message));
   } catch (err) {
     const outcome = describeError(err);
     if (outcome.kind === "retry") return reply(500);

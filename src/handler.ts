@@ -3,6 +3,9 @@ import { CheckinRepository } from "./domain/checkin-repository.js";
 import { ReviewRepository } from "./domain/review-repository.js";
 import { MetaRepository } from "./domain/meta-repository.js";
 import { TaskRepository } from "./domain/task-repository.js";
+import { createBedrockConverse } from "../shared/ai/bedrock.js";
+import { loadAiConfig } from "../shared/ai/config.js";
+import { createHermesAi, createHermesConversation } from "./ai/hermes.js";
 import { parseScheduledEvent, runScheduled, type ScheduleDeps } from "./schedule/run.js";
 import { createSsmReader } from "./ssm.js";
 import { createTelegramClient } from "./telegram/client.js";
@@ -41,9 +44,14 @@ async function build(): Promise<Route> {
     checkins: new CheckinRepository(store, systemClock),
     reviews: new ReviewRepository(store, systemClock),
   };
+  // IA opcional: desligada (padrão) ou mal configurada, o bot segue só com os comandos.
+  const aiConfig = loadAiConfig(process.env);
+  const converse = aiConfig
+    ? createHermesConversation(createHermesAi(aiConfig, createBedrockConverse(aiConfig.region)), { clock: systemClock, ...repos })
+    : undefined;
   const scheduleDeps: ScheduleDeps = { clock: systemClock, client, chatIds: config.allowedChatIds, ...repos };
   return {
-    http: createHandler({ config, client, clock: systemClock, ...repos }),
+    http: createHandler({ config, client, clock: systemClock, ...repos, ...(converse && { converse }) }),
     schedule: (ev) => runScheduled(ev, scheduleDeps),
   };
 }

@@ -32,6 +32,29 @@ Parameters:
     Default: /renato/prod/telegram
     Description: Prefixo dos parâmetros SecureString do bot independente do Renato
 
+  AiEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Liga a conversa natural (Hermes e Renato) via Amazon Bedrock. Desligada por padrão.
+  BedrockModelId:
+    Type: String
+    Default: us.amazon.nova-lite-v1:0
+    Description: Inference profile do Amazon Nova Lite (o modelo não existe em sa-east-1; o profile "us." roteia entre regiões dos EUA)
+  BedrockRegion:
+    Type: String
+    Default: us-east-1
+    Description: Região do Bedrock Runtime, que pode diferir da região da stack
+  AiMaxHistoryMessages:
+    Type: String
+    Default: "6"
+  AiMaxInputChars:
+    Type: String
+    Default: "1000"
+  AiMaxOutputTokens:
+    Type: String
+    Default: "400"
+
 Resources:
   HermesLogGroup:
     Type: AWS::Logs::LogGroup
@@ -65,6 +88,12 @@ Resources:
           VAULT_REPO: !Ref VaultRepo
           VAULT_BRANCH: !Ref VaultBranch
           VAULT_GITHUB_TOKEN_PARAM: !Ref VaultTokenParam
+          AI_ENABLED: !Ref AiEnabled
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
+          BEDROCK_REGION: !Ref BedrockRegion
+          AI_MAX_HISTORY_MESSAGES: !Ref AiMaxHistoryMessages
+          AI_MAX_INPUT_CHARS: !Ref AiMaxInputChars
+          AI_MAX_OUTPUT_TOKENS: !Ref AiMaxOutputTokens
       Policies:
         - Version: "2012-10-17"
           Statement:
@@ -75,6 +104,14 @@ Resources:
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SsmPrefix}/webhook-secret"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SsmPrefix}/allowed-chat-ids"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${VaultTokenParam}"
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource:
+                - !Sub "arn:${AWS::Partition}:bedrock:${BedrockRegion}:${AWS::AccountId}:inference-profile/${BedrockModelId}"
+                # O profile "us." roteia para estas regiões; o modelo base precisa estar liberado em cada uma.
+                - !Sub "arn:${AWS::Partition}:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0"
+                - !Sub "arn:${AWS::Partition}:bedrock:us-east-2::foundation-model/amazon.nova-lite-v1:0"
+                - !Sub "arn:${AWS::Partition}:bedrock:us-west-2::foundation-model/amazon.nova-lite-v1:0"
       Events:
         TelegramWebhook:
           Type: HttpApi
@@ -169,6 +206,12 @@ Resources:
           RENATO_VAULT_BRANCH: !Ref VaultBranch
           RENATO_VAULT_DIRECTORY: Renato/Notas
           RENATO_VAULT_GITHUB_TOKEN_PARAM: !Ref VaultTokenParam
+          AI_ENABLED: !Ref AiEnabled
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
+          BEDROCK_REGION: !Ref BedrockRegion
+          AI_MAX_HISTORY_MESSAGES: !Ref AiMaxHistoryMessages
+          AI_MAX_INPUT_CHARS: !Ref AiMaxInputChars
+          AI_MAX_OUTPUT_TOKENS: !Ref AiMaxOutputTokens
       Policies:
         - Version: "2012-10-17"
           Statement:
@@ -179,6 +222,14 @@ Resources:
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${RenatoSsmPrefix}/webhook-secret"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${RenatoSsmPrefix}/allowed-chat-ids"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${VaultTokenParam}"
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource:
+                - !Sub "arn:${AWS::Partition}:bedrock:${BedrockRegion}:${AWS::AccountId}:inference-profile/${BedrockModelId}"
+                # O profile "us." roteia para estas regiões; o modelo base precisa estar liberado em cada uma.
+                - !Sub "arn:${AWS::Partition}:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0"
+                - !Sub "arn:${AWS::Partition}:bedrock:us-east-2::foundation-model/amazon.nova-lite-v1:0"
+                - !Sub "arn:${AWS::Partition}:bedrock:us-west-2::foundation-model/amazon.nova-lite-v1:0"
       Events:
         RenatoTelegramWebhook:
           Type: HttpApi

@@ -3,7 +3,7 @@ import { CheckinRepository } from "./domain/checkin-repository.js";
 import { ReviewRepository } from "./domain/review-repository.js";
 import { MetaRepository } from "./domain/meta-repository.js";
 import { TaskRepository } from "./domain/task-repository.js";
-import { createBedrockConverse } from "../shared/ai/bedrock.js";
+import { loadConverse } from "../shared/ai/bedrock.js";
 import { loadAiConfig } from "../shared/ai/config.js";
 import { createHermesAi, createHermesConversation } from "./ai/hermes.js";
 import { parseScheduledEvent, runScheduled, type ScheduleDeps } from "./schedule/run.js";
@@ -46,8 +46,9 @@ async function build(): Promise<Route> {
   };
   // IA opcional: desligada (padrão) ou mal configurada, o bot segue só com os comandos.
   const aiConfig = loadAiConfig(process.env);
-  const converse = aiConfig
-    ? createHermesConversation(createHermesAi(aiConfig, createBedrockConverse(aiConfig.region)), { clock: systemClock, ...repos })
+  const bedrock = aiConfig ? await loadConverse(aiConfig, (name) => ssm.get(name)) : undefined;
+  const converse = aiConfig && bedrock
+    ? createHermesConversation(createHermesAi(aiConfig, bedrock), { clock: systemClock, ...repos })
     : undefined;
   const scheduleDeps: ScheduleDeps = { clock: systemClock, client, chatIds: config.allowedChatIds, ...repos };
   return {

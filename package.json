@@ -17,7 +17,6 @@
     "telegram": "esbuild scripts/telegram-admin.ts --bundle --platform=node --format=esm --target=es2022 --outfile=.smoke/telegram-admin.mjs --log-level=warning --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node .smoke/telegram-admin.mjs"
   },
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.1156.0",
     "@aws-sdk/client-ssm": "^3.1140.0",
     "luxon": "^3.7.2",
     "yaml": "^2.9.1"

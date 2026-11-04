@@ -1,7 +1,7 @@
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { timingSafeEqual } from "node:crypto";
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-lambda";
-import { createBedrockConverse } from "../../shared/ai/bedrock.js";
+import { loadConverse } from "../../shared/ai/bedrock.js";
 import { loadAiConfig } from "../../shared/ai/config.js";
 import { createTelegramHandler, type HttpResponse } from "./handler.js";
 import { createRenatoAi, createRenatoConversation, explicitCapture, HELP_TEXT, CAPTURE_COMMAND, type RenatoConversation } from "./conversation.js";
@@ -240,9 +240,8 @@ async function buildProductionHandler() {
   });
   // IA opcional: desligada (padrão) ou mal configurada, o Renato mantém a captura original.
   const aiConfig = loadAiConfig(process.env);
-  const conversation = aiConfig
-    ? createRenatoConversation(createRenatoAi(aiConfig, createBedrockConverse(aiConfig.region)))
-    : undefined;
+  const bedrock = aiConfig ? await loadConverse(aiConfig, (name) => readParameter(ssm, name)) : undefined;
+  const conversation = aiConfig && bedrock ? createRenatoConversation(createRenatoAi(aiConfig, bedrock)) : undefined;
   return createRenatoWebhookHandler({
     ...(conversation && { conversation }),
     webhookSecret: config.webhookSecret,

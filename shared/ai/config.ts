@@ -12,20 +12,23 @@ function positiveInt(raw: string | undefined, fallback: number, max: number): nu
 
 /**
  * Configuração da camada conversacional, ou null se desligada. Desligada por padrão: só liga com
- * AI_ENABLED=true e BEDROCK_MODEL_ID preenchido (config incompleta nunca derruba o bot).
+ * AI_ENABLED=true, BEDROCK_MODEL_ID e BEDROCK_API_KEY_PARAM (nome do parâmetro SSM com a API key do Bedrock)
+ * preenchidos (config incompleta nunca derruba o bot).
  * A região vem de BEDROCK_REGION; sem ela, de AWS_REGION (a da Lambda).
  */
 export function loadAiConfig(env: Env): AiConfig | null {
   if (env.AI_ENABLED?.trim().toLowerCase() !== "true") return null;
   const modelId = env.BEDROCK_MODEL_ID?.trim();
   const region = env.BEDROCK_REGION?.trim() || env.AWS_REGION?.trim();
-  if (!modelId || !region) {
-    console.error("[ai] AI_ENABLED=true mas falta BEDROCK_MODEL_ID ou região; camada de IA desligada");
+  const apiKeyParam = env.BEDROCK_API_KEY_PARAM?.trim();
+  if (!modelId || !region || !apiKeyParam) {
+    console.error("[ai] AI_ENABLED=true mas falta BEDROCK_MODEL_ID, BEDROCK_API_KEY_PARAM ou região; camada de IA desligada");
     return null;
   }
   return {
     modelId,
     region,
+    apiKeyParam,
     maxHistoryMessages: positiveInt(env.AI_MAX_HISTORY_MESSAGES, DEFAULTS.maxHistoryMessages, 20),
     maxInputChars: positiveInt(env.AI_MAX_INPUT_CHARS, DEFAULTS.maxInputChars, 4000),
     maxOutputTokens: positiveInt(env.AI_MAX_OUTPUT_TOKENS, DEFAULTS.maxOutputTokens, 1000),

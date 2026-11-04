@@ -11,13 +11,12 @@
     "test": "TZ=UTC vitest run && TZ=Asia/Tokyo vitest run"
   },
   "devDependencies": {
+    "@types/aws-lambda": "^8.10.163",
     "@types/node": "^26.6.2",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.2",
-    "@types/aws-lambda": "^8.10.163"
+    "vitest": "^5.0.2"
   },
   "dependencies": {
-    "@aws-sdk/client-ssm": "^3.1140.0",
-    "@aws-sdk/client-bedrock-runtime": "^3.1156.0"
+    "@aws-sdk/client-ssm": "^3.1140.0"
   }
 }

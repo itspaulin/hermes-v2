@@ -39,8 +39,12 @@ Parameters:
     Description: Liga a conversa natural (Hermes e Renato) via Amazon Bedrock. Desligada por padrão.
   BedrockModelId:
     Type: String
-    Default: us.amazon.nova-lite-v1:0
-    Description: Inference profile do Amazon Nova Lite (o modelo não existe em sa-east-1; o profile "us." roteia entre regiões dos EUA)
+    Default: us.anthropic.claude-haiku-4-5-20251001-v1:0
+    Description: Inference profile do Claude Haiku 4.5 (o modelo não existe em sa-east-1; o profile "us." roteia entre regiões dos EUA)
+  BedrockApiKeyParam:
+    Type: String
+    Default: /hermes/prod/bedrock/api-key
+    Description: Nome (não o valor) do parâmetro SecureString com a API key do Bedrock, compartilhada pelo Hermes e pelo Renato
   BedrockRegion:
     Type: String
     Default: us-east-1
@@ -90,6 +94,7 @@ Resources:
           VAULT_GITHUB_TOKEN_PARAM: !Ref VaultTokenParam
           AI_ENABLED: !Ref AiEnabled
           BEDROCK_MODEL_ID: !Ref BedrockModelId
+          BEDROCK_API_KEY_PARAM: !Ref BedrockApiKeyParam
           BEDROCK_REGION: !Ref BedrockRegion
           AI_MAX_HISTORY_MESSAGES: !Ref AiMaxHistoryMessages
           AI_MAX_INPUT_CHARS: !Ref AiMaxInputChars
@@ -104,14 +109,8 @@ Resources:
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SsmPrefix}/webhook-secret"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SsmPrefix}/allowed-chat-ids"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${VaultTokenParam}"
-            - Effect: Allow
-              Action: bedrock:InvokeModel
-              Resource:
-                - !Sub "arn:${AWS::Partition}:bedrock:${BedrockRegion}:${AWS::AccountId}:inference-profile/${BedrockModelId}"
-                # O profile "us." roteia para estas regiões; o modelo base precisa estar liberado em cada uma.
-                - !Sub "arn:${AWS::Partition}:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0"
-                - !Sub "arn:${AWS::Partition}:bedrock:us-east-2::foundation-model/amazon.nova-lite-v1:0"
-                - !Sub "arn:${AWS::Partition}:bedrock:us-west-2::foundation-model/amazon.nova-lite-v1:0"
+                # API key do Bedrock: a chamada usa a key (bearer), não a role, então a role só lê o parâmetro.
+                - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${BedrockApiKeyParam}"
       Events:
         TelegramWebhook:
           Type: HttpApi
@@ -208,6 +207,7 @@ Resources:
           RENATO_VAULT_GITHUB_TOKEN_PARAM: !Ref VaultTokenParam
           AI_ENABLED: !Ref AiEnabled
           BEDROCK_MODEL_ID: !Ref BedrockModelId
+          BEDROCK_API_KEY_PARAM: !Ref BedrockApiKeyParam
           BEDROCK_REGION: !Ref BedrockRegion
           AI_MAX_HISTORY_MESSAGES: !Ref AiMaxHistoryMessages
           AI_MAX_INPUT_CHARS: !Ref AiMaxInputChars
@@ -222,14 +222,8 @@ Resources:
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${RenatoSsmPrefix}/webhook-secret"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${RenatoSsmPrefix}/allowed-chat-ids"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${VaultTokenParam}"
-            - Effect: Allow
-              Action: bedrock:InvokeModel
-              Resource:
-                - !Sub "arn:${AWS::Partition}:bedrock:${BedrockRegion}:${AWS::AccountId}:inference-profile/${BedrockModelId}"
-                # O profile "us." roteia para estas regiões; o modelo base precisa estar liberado em cada uma.
-                - !Sub "arn:${AWS::Partition}:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0"
-                - !Sub "arn:${AWS::Partition}:bedrock:us-east-2::foundation-model/amazon.nova-lite-v1:0"
-                - !Sub "arn:${AWS::Partition}:bedrock:us-west-2::foundation-model/amazon.nova-lite-v1:0"
+                # API key do Bedrock: a chamada usa a key (bearer), não a role, então a role só lê o parâmetro.
+                - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${BedrockApiKeyParam}"
       Events:
         RenatoTelegramWebhook:
           Type: HttpApi

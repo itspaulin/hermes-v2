@@ -5,7 +5,7 @@ import { createAiService } from "../shared/ai/service.js";
 import type { Converse } from "../shared/ai/bedrock.js";
 import type { AiConfig } from "../shared/ai/types.js";
 
-const config: AiConfig = { modelId: "model-x", region: "us-east-1", maxHistoryMessages: 2, maxInputChars: 50, maxOutputTokens: 77, timeoutMs: 1000 };
+const config: AiConfig = { modelId: "model-x", region: "us-east-1", apiKeyParam: "/p/key", maxHistoryMessages: 2, maxInputChars: 50, maxOutputTokens: 77, timeoutMs: 1000 };
 type Acts = { ping: { n: number } };
 const schemas = { ping: (i: unknown) => (typeof (i as { n?: unknown })?.n === "number" ? { n: (i as { n: number }).n } : null) };
 
@@ -115,10 +115,11 @@ describe("loadAiConfig", () => {
     expect(loadAiConfig({})).toBeNull();
     expect(loadAiConfig({ AI_ENABLED: "false", BEDROCK_MODEL_ID: "m", AWS_REGION: "r" })).toBeNull();
     expect(loadAiConfig({ AI_ENABLED: "true", AWS_REGION: "r" })).toBeNull();
-    expect(loadAiConfig({ AI_ENABLED: "true", BEDROCK_MODEL_ID: "m" })).toBeNull();
+    expect(loadAiConfig({ AI_ENABLED: "true", BEDROCK_MODEL_ID: "m", AWS_REGION: "r" })).toBeNull(); // sem BEDROCK_API_KEY_PARAM
+    expect(loadAiConfig({ AI_ENABLED: "true", BEDROCK_MODEL_ID: "m", BEDROCK_API_KEY_PARAM: "/p/key" })).toBeNull();
   });
   it("liga com defaults, região do Bedrock sobrepondo a da Lambda, e limita valores", () => {
-    const c = loadAiConfig({ AI_ENABLED: "TRUE", BEDROCK_MODEL_ID: "m", AWS_REGION: "sa-east-1", BEDROCK_REGION: "us-east-1", AI_MAX_OUTPUT_TOKENS: "999999", AI_MAX_INPUT_CHARS: "abc" });
-    expect(c).toMatchObject({ modelId: "m", region: "us-east-1", maxOutputTokens: 1000, maxInputChars: 1000, maxHistoryMessages: 6 });
+    const c = loadAiConfig({ AI_ENABLED: "TRUE", BEDROCK_MODEL_ID: "m", BEDROCK_API_KEY_PARAM: "/p/key", AWS_REGION: "sa-east-1", BEDROCK_REGION: "us-east-1", AI_MAX_OUTPUT_TOKENS: "999999", AI_MAX_INPUT_CHARS: "abc" });
+    expect(c).toMatchObject({ modelId: "m", region: "us-east-1", apiKeyParam: "/p/key", maxOutputTokens: 1000, maxInputChars: 1000, maxHistoryMessages: 6 });
   });
 });

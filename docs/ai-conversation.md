@@ -1,6 +1,6 @@
 # Conversa natural (Amazon Bedrock)
 
-Hermes e Renato conversam em linguagem natural via Amazon Bedrock (Converse API, Amazon Nova Lite). A camada é **opcional e desligada por padrão**; comandos e fluxos determinísticos não dependem dela.
+Hermes e Renato conversam em linguagem natural via Amazon Bedrock (Converse API, Claude Haiku 4.5). A camada é **opcional e desligada por padrão**; comandos e fluxos determinísticos não dependem dela.
 
 ## Fluxo
 
@@ -17,34 +17,43 @@ O modelo devolve JSON (`reply` | `clarify` | `action`). O código valida; ação
 
 ## Código
 
-- `shared/ai/`: `config.ts` (env), `decision.ts` (parser/allowlist), `service.ts` (limites, timeout, erros, logs sem conteúdo), `bedrock.ts` (único arquivo que toca o SDK; injetável nos testes).
+- `shared/ai/`: `config.ts` (env), `decision.ts` (parser/allowlist), `service.ts` (limites, timeout, erros, logs sem conteúdo), `bedrock.ts` (único arquivo que fala com o Bedrock, por `fetch` com API key; injetável nos testes).
 - `src/ai/hermes.ts`, `renato/src/conversation.ts`: prompts e ações de cada assistente. Nada é compartilhado entre os dois além do serviço.
 
-## Modelo e região
+## Modelo, região e credencial
 
-`sa-east-1` (região da stack) **não tem** Nova Lite nem inference profile dele (verificado com `aws bedrock list-inference-profiles`). Em `us-east-1` existe o profile `us.amazon.nova-lite-v1:0`. Por isso o cliente do Bedrock usa `BEDROCK_REGION=us-east-1` e as mensagens de conversa trafegam para regiões dos EUA. Confirme se isso é aceitável antes de ligar. Habilite o acesso ao modelo no console do Bedrock (Model access) em `us-east-1` na conta.
+Modelo: `us.anthropic.claude-haiku-4-5-20251001-v1:0`, o mesmo dos projetos `prospeccao` e `financas`. `sa-east-1` (região da stack) não tem esse modelo; o profile `us.` existe em `us-east-1`, então `BEDROCK_REGION=us-east-1` e as mensagens de conversa trafegam para regiões dos EUA.
+
+A chamada usa uma **API key do Bedrock** (bearer token) na Converse API, sem SDK e sem permissão IAM de Bedrock na role da Lambda. A key fica no SSM como SecureString (padrão `/hermes/prod/bedrock/api-key`), lida só no cold start, e as duas Lambdas podem lê-la. Criar uma vez (a key vem do console do Bedrock, menu API keys, na conta onde o Haiku 4.5 está liberado):
+
+```
+aws ssm put-parameter --region sa-east-1 --name /hermes/prod/bedrock/api-key --type SecureString --value '<key>'
+```
+
+Sem a key (parâmetro ausente ou vazio) a IA fica desligada e o bot segue com os comandos, com log `[ai] sem API key do Bedrock`.
 
 ## Variáveis de ambiente (parâmetros do `template.yaml`)
 
 | Variável | Parâmetro SAM | Padrão |
 |---|---|---|
 | `AI_ENABLED` | `AiEnabled` | `false` |
-| `BEDROCK_MODEL_ID` | `BedrockModelId` | `us.amazon.nova-lite-v1:0` |
+| `BEDROCK_MODEL_ID` | `BedrockModelId` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` |
+| `BEDROCK_API_KEY_PARAM` | `BedrockApiKeyParam` | `/hermes/prod/bedrock/api-key` |
 | `BEDROCK_REGION` | `BedrockRegion` | `us-east-1` (sem ela, usa `AWS_REGION`) |
 | `AI_MAX_HISTORY_MESSAGES` | `AiMaxHistoryMessages` | 6 (máx. 20) |
 | `AI_MAX_INPUT_CHARS` | `AiMaxInputChars` | 1000 (máx. 4000) |
 | `AI_MAX_OUTPUT_TOKENS` | `AiMaxOutputTokens` | 400 (máx. 1000) |
 | `AI_TIMEOUT_MS` | (não exposta) | 8000 |
 
-`AI_ENABLED=true` sem modelo/região deixa a IA desligada (log de erro, bot segue). Retry: no máximo 1, só falhas transitórias do SDK. Sem cache nem chamada para comandos.
+`AI_ENABLED=true` sem modelo, parâmetro da key ou região deixa a IA desligada (log de erro, bot segue). Sem retry: o timeout é curto e o usuário pode reenviar. Sem cache nem chamada para comandos.
 
 ## IAM (já no `template.yaml`, nas duas funções)
 
-`bedrock:InvokeModel` em:
-- `arn:aws:bedrock:us-east-1:<conta>:inference-profile/us.amazon.nova-lite-v1:0`
-- `arn:aws:bedrock:{us-east-1,us-east-2,us-west-2}::foundation-model/amazon.nova-lite-v1:0` (destinos do profile `us.`)
+Só `ssm:GetParameter` no parâmetro da key, além dos que já existiam. A key carrega a própria autorização no Bedrock.
 
-Sem credenciais no código; usa a role da Lambda.
+## Tom das respostas
+
+Os prompts de sistema (`src/ai/hermes.ts`, `renato/src/conversation.ts`) têm um bloco "Tom": frases curtas, reagir ao que a pessoa disse, sem fórmulas de atendimento, sem listas. É o lugar para afinar a personalidade depois de ver conversas reais.
 
 ## Testar localmente
 

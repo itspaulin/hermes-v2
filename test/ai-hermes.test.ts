@@ -9,7 +9,7 @@ import { fakeClock } from "../src/time/index.js";
 import { makeRepos } from "./support/repos.js";
 
 const clock = fakeClock("2026-09-25T17:30:00Z");
-const config: AiConfig = { modelId: "m", region: "us-east-1", maxHistoryMessages: 4, maxInputChars: 500, maxOutputTokens: 100, timeoutMs: 1000 };
+const config: AiConfig = { modelId: "m", region: "us-east-1", apiKeyParam: "/p/key", maxHistoryMessages: 4, maxInputChars: 500, maxOutputTokens: 100, timeoutMs: 1000 };
 const EVENT = Math.floor(Date.parse("2026-09-25T17:30:00Z") / 1000);
 
 function setup(converse: Converse) {

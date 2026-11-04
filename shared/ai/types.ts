@@ -18,8 +18,10 @@ export type AiResult<D> = { ok: true; decision: D } | { ok: false; reason: AiFai
 
 export interface AiConfig {
   modelId: string;
-  /** Região do Bedrock Runtime. Pode diferir da região da Lambda (ex.: Nova Lite não existe em sa-east-1). */
+  /** Região do Bedrock Runtime. Pode diferir da região da Lambda (o Haiku 4.5 roda em us-east-1). */
   region: string;
+  /** Nome do parâmetro SSM SecureString com a API key (bearer) do Bedrock. */
+  apiKeyParam: string;
   maxHistoryMessages: number;
   maxInputChars: number;
   maxOutputTokens: number;

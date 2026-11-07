@@ -12,8 +12,27 @@ O modelo devolve JSON (`reply` | `clarify` | `action`). O código valida; ação
 
 | Assistente | Ações permitidas |
 |---|---|
-| Hermes | `show_today` (= `/hoje`), `show_week` (= `/semana`), `create_task` (= `/tarefa`, título ≤ 120, `due` AAAA-MM-DD opcional) |
+| Hermes | `show_today` (= `/hoje`), `show_week` (= `/semana`), `create_task` (= `/tarefa`, título ≤ 120, `due` AAAA-MM-DD opcional), `create_tasks` (até 10 de uma vez, sem pergunta de meta), `set_task_due` (prazo de tarefas pendentes, só por IDs que existem) |
 | Renato | `capture_note` (sem argumentos: o conteúdo é sempre a mensagem do usuário) |
+
+## Contexto que o Hermes recebe
+
+A cada texto solto o Hermes lê as tarefas pendentes do Vault (como o `/hoje`) e passa ao modelo: ID, título, hora de criação e prazo, mais recentes primeiro (até 40). É isso que permite "essa tarefa tem prazo até 8/11" virar `set_task_due` na tarefa certa em vez de uma tarefa nova. O código só aplica `set_task_due` em IDs que estavam na lista de pendentes.
+
+Várias linhas `/tarefa` coladas na mesma mensagem viram uma tarefa por linha (em lote nunca há pergunta de meta; a tarefa nasce sem meta).
+
+## Memória da conversa (Neon)
+
+O Hermes guarda as últimas mensagens da conversa no Postgres do Neon (`src/ai/history.ts`, tabela `hermes_chat_history`, criada sozinha no primeiro uso): a mensagem do usuário e o que ele viu como resposta (o resultado real da ação). Só entram no contexto as últimas 6 mensagens (`AI_MAX_HISTORY_MESSAGES`) dos últimos 120 minutos; o que passa de 24 h é apagado a cada gravação. Comandos `/...` não passam pelo modelo e não entram no histórico.
+
+- **Opcional e à prova de falha**: sem o parâmetro SSM, ou com o Neon fora do ar / lento (timeout de 3 s por consulta), o Hermes conversa normalmente, só sem histórico. Logs trazem só o nome do erro, nunca mensagens.
+- **Segredo**: a connection string fica no SSM como SecureString (padrão `/hermes/prod/neon/database-url`, parâmetro `NeonDatabaseUrlParam`), lida só no cold start, nunca pelo chat. Criar uma vez:
+
+```
+aws ssm put-parameter --region sa-east-1 --name /hermes/prod/neon/database-url --type SecureString --value '<connection string do Neon>'
+```
+
+- **Dados**: o conteúdo das conversas fica no Neon. O Renato não usa histórico.
 
 ## Código
 
@@ -73,7 +92,7 @@ Para desligar: `AiEnabled=false` (ou omita). Valide com as mensagens "Oi" no Her
 
 ## Limitações da primeira versão
 
-- Sem histórico entre mensagens (Lambda sem estado, e não há armazenamento adequado; DynamoDB não justificado ainda). O serviço já aceita `history`, mas nenhum chamador o preenche. Por isso o modelo, em dúvida, pede que o usuário confirme com o comando (`/tarefa ...`, `/anotar ...`).
+- O Renato não tem histórico entre mensagens (Lambda sem estado). O serviço aceita `history`, mas só o Hermes o preenche (via Neon). Por isso o Renato, em dúvida, pede que o usuário confirme com o comando (`/anotar ...`).
 - Hermes não marca tarefa como feita/cancelada por conversa (exige resolução de tarefa ambígua): usar `/feita`, `/cancelar`.
 - Renato não consulta o Vault ("O que anotei sobre X?" não é respondido com dados reais; o prompt o proíbe de inventar). Busca fica para uma etapa posterior.
 - `/anotar@nome_do_bot texto` (com menção) não é reconhecido.

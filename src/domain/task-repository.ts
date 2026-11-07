@@ -183,7 +183,37 @@ export class TaskRepository {
     return { tasks, skipped };
   }
 
-  private async setStatus(id: string, target: TaskStatus): Promise<{ task: Task; changed: boolean }> {
+  /**
+   * Idempotente. `changed` = false se o prazo já era esse (nada é escrito). Só tarefas pendentes
+   * mudam de prazo: feita/cancelada vira TaskValidationError.
+   */
+  async setDue(id: string, due: LocalDate): Promise<{ task: Task; changed: boolean }> {
+    validateDue(due);
+    return this.mutate(id, (note, current) => {
+      if (current.status !== "pendente") throw new TaskValidationError(`A tarefa já está ${current.status}.`);
+      if (current.due === due) return false;
+      setScalar(note, "due", due);
+      return true;
+    });
+  }
+
+  private setStatus(id: string, target: TaskStatus): Promise<{ task: Task; changed: boolean }> {
+    return this.mutate(id, (note, current, now) => {
+      if (current.status === target) return false;
+      setScalar(note, "status", target);
+      if (target === "feita" && current.doneAt === undefined) setScalar(note, "done_at", now);
+      return true;
+    });
+  }
+
+  /**
+   * Lê, aplica `apply` (devolve false se nada muda) e grava com lock otimista; em conflito relê e
+   * reaplica sobre a versão nova. Só campos do Hermes; corpo e chaves desconhecidas ficam como estão.
+   */
+  private async mutate(
+    id: string,
+    apply: (note: ReturnType<typeof parseNote>, current: Task, now: string) => boolean,
+  ): Promise<{ task: Task; changed: boolean }> {
     const path = taskPath(id);
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -192,12 +222,9 @@ export class TaskRepository {
 
       const note = parseNote(file.content, path);
       const current = taskFromNote(note, path);
-      if (current.status === target) return { task: current, changed: false };
 
-      // Só campos que o Hermes possui. Corpo e chaves desconhecidas ficam como estão.
       const now = nowIso(this.clock);
-      setScalar(note, "status", target);
-      if (target === "feita" && current.doneAt === undefined) setScalar(note, "done_at", now);
+      if (!apply(note, current, now)) return { task: current, changed: false };
       setScalar(note, "updated", now);
       const next = serializeNote(note);
 

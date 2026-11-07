@@ -49,6 +49,10 @@ Parameters:
     Type: String
     Default: us-east-1
     Description: Região do Bedrock Runtime, que pode diferir da região da stack
+  NeonDatabaseUrlParam:
+    Type: String
+    Default: /hermes/prod/neon/database-url
+    Description: Nome (não o valor) do parâmetro SecureString com a connection string do Neon (histórico curto da conversa do Hermes). Sem o parâmetro, o Hermes conversa sem histórico.
   AiMaxHistoryMessages:
     Type: String
     Default: "6"
@@ -96,6 +100,7 @@ Resources:
           BEDROCK_MODEL_ID: !Ref BedrockModelId
           BEDROCK_API_KEY_PARAM: !Ref BedrockApiKeyParam
           BEDROCK_REGION: !Ref BedrockRegion
+          NEON_DATABASE_URL_PARAM: !Ref NeonDatabaseUrlParam
           AI_MAX_HISTORY_MESSAGES: !Ref AiMaxHistoryMessages
           AI_MAX_INPUT_CHARS: !Ref AiMaxInputChars
           AI_MAX_OUTPUT_TOKENS: !Ref AiMaxOutputTokens
@@ -111,6 +116,7 @@ Resources:
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${VaultTokenParam}"
                 # API key do Bedrock: a chamada usa a key (bearer), não a role, então a role só lê o parâmetro.
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${BedrockApiKeyParam}"
+                - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NeonDatabaseUrlParam}"
       Events:
         TelegramWebhook:
           Type: HttpApi

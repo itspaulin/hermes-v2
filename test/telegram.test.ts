@@ -99,6 +99,22 @@ describe("comandos", () => {
     expect(await route("/foo")).toContain("/tarefa, /feita, /cancelar, /hoje, /semana, /meta, /metas, /metafeita, /metacancelar, /checkin, /metrica, /revisao, /ping");
   });
 
+  it("várias linhas /tarefa na mesma mensagem criam uma tarefa por linha, sem pergunta de meta", async () => {
+    const repos = makeRepos(guardVaultStore(new InMemoryVaultStore()), clock);
+    await repos.metas.create({ title: "Meta ativa", eventEpochSeconds: 1_790_000_000 });
+    const out = await routeMessage("/tarefa Ideia de 2 apps\n/tarefa Identidade da Somisfy até 2026-11-08\n\n/tarefa Ideias de prospecção", 1_790_000_000, { clock, ...repos });
+    expect(typeof out).toBe("string");
+    const { tasks } = await repos.tasks.listPending();
+    expect(tasks.map((t) => t.title).sort()).toEqual(["Ideia de 2 apps", "Ideias de prospecção", "Identidade da Somisfy"]);
+    expect(tasks.find((t) => t.title === "Identidade da Somisfy")!.due).toBe("2026-11-08");
+  });
+
+  it("linhas com texto solto no meio continuam sendo um comando só", async () => {
+    const repos = makeRepos(guardVaultStore(new InMemoryVaultStore()), clock);
+    await routeMessage("/tarefa Comprar pão\ne leite", 1_790_000_000, { clock, ...repos });
+    expect((await repos.tasks.listPending()).tasks.map((t) => t.title)).toEqual(["Comprar pão e leite"]);
+  });
+
   it("mensagem sem comando", async () => {
     expect(await route("oi")).toContain("Envie um comando");
     expect(parseCommand("olá /ping")).toBeNull();

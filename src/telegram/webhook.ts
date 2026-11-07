@@ -83,7 +83,7 @@ export async function handleWebhook(
 
   let result: Reply;
   try {
-    result = asReply(await routeMessage(message.text, message.date, routeDeps, message.reply_to_message));
+    result = asReply(await routeMessage(message.text, message.date, { ...routeDeps, chatId: message.chat.id }, message.reply_to_message));
   } catch (err) {
     const outcome = describeError(err);
     if (outcome.kind === "retry") return reply(500);

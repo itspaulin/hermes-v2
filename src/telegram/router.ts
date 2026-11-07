@@ -5,7 +5,7 @@ import type { TaskRepository } from "../domain/task-repository.js";
 import { nowIso, type Clock } from "../time/index.js";
 import type { HermesConversation } from "../ai/hermes.js";
 import { answerByText } from "./meta-answer.js";
-import type { RouteResult } from "./reply.js";
+import { asReply, type RouteResult } from "./reply.js";
 import type { TelegramMessage } from "./types.js";
 import { cmdHoje, cmdSemana } from "./list-commands.js";
 import { cmdResponderCheckin, cmdRevisao } from "./report-commands.js";
@@ -20,6 +20,8 @@ export interface RouterDeps {
   reviews: ReviewRepository;
   /** Conversa natural para texto solto. Ausente = IA desligada: o texto solto recebe só a ajuda. */
   converse?: HermesConversation;
+  /** Chat da mensagem, para a memória da conversa. */
+  chatId?: number;
 }
 
 const COMMANDS_HELP = "Comandos: /tarefa, /feita, /cancelar, /hoje, /semana, /meta, /metas, /metafeita, /metacancelar, /checkin, /metrica, /revisao, /ping";
@@ -43,15 +45,25 @@ export function parseCommand(text: string): string | null {
 export async function routeMessage(
   text: string,
   eventEpochSeconds: number | undefined,
-  { clock, tasks, metas, checkins, reviews, converse }: RouterDeps,
+  { clock, tasks, metas, checkins, reviews, converse, chatId }: RouterDeps,
   replyTo?: TelegramMessage,
+  inBatch = false,
 ): Promise<RouteResult> {
+  const lines = text.split("\n").map((l) => l.trim()).filter((l) => l !== "");
+  if (!inBatch && lines.length > 1 && lines.every((l) => parseCommandLine(l) !== null)) {
+    // Vários comandos colados na mesma mensagem: cada linha é um comando. Em lote não há pergunta de meta.
+    const deps = { clock, tasks, metas, checkins, reviews };
+    const texts: string[] = [];
+    for (const line of lines) texts.push(asReply(await routeMessage(line, eventEpochSeconds, deps, undefined, true)).text);
+    return texts.join("\n\n");
+  }
+
   const cmd = parseCommandLine(text);
   if (!cmd) {
     // Texto solto só tem contexto se for resposta (reply) a uma pergunta do próprio Hermes.
     const answered = replyTo ? await answerByText(text, replyTo, { clock, tasks, metas }) : null;
     if (answered) return answered;
-    return converse ? converse(text, eventEpochSeconds) : `Envie um comando. ${COMMANDS_HELP}`;
+    return converse ? converse(text, eventEpochSeconds, chatId) : `Envie um comando. ${COMMANDS_HELP}`;
   }
 
   switch (cmd.name) {
@@ -67,7 +79,7 @@ export async function routeMessage(
     case "ping":
       return `pong ${nowIso(clock)}`;
     case "tarefa":
-      return cmdTarefa(cmd.args, eventEpochSeconds, { tasks, metas });
+      return cmdTarefa(cmd.args, eventEpochSeconds, { tasks, metas }, !inBatch);
     case "feita":
       return cmdMudarStatus("feita", cmd.args, tasks);
     case "cancelar":

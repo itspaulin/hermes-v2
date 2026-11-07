@@ -1,4 +1,4 @@
-import { parseDecision, type ActionSchemas, type DecisionOf } from "./decision.js";
+import { explainRejection, parseDecision, type ActionSchemas, type DecisionOf } from "./decision.js";
 import type { Converse } from "./bedrock.js";
 import type { AiConfig, AiFailureReason, AiResult, AssistantId, ConversationTurn } from "./types.js";
 
@@ -83,7 +83,10 @@ export function createAiService<Actions extends Record<string, unknown>>(
       }
 
       const decision = parseDecision<Actions>(response.text, opts.schemas);
-      if (!decision) return fail("invalid_output");
+      if (!decision) {
+        console.error(`[ai] assistant=${assistant} saida_recusada=${explainRejection(response.text, opts.schemas)}`);
+        return fail("invalid_output");
+      }
       console.log(
         `[ai] assistant=${assistant} ok ms=${Date.now() - started} in=${response.inputTokens ?? "?"} out=${response.outputTokens ?? "?"}`,
       );

@@ -123,3 +123,17 @@ describe("loadAiConfig", () => {
     expect(c).toMatchObject({ modelId: "m", region: "us-east-1", apiKeyParam: "/p/key", maxOutputTokens: 1000, maxInputChars: 1000, maxHistoryMessages: 6 });
   });
 });
+
+describe("explainRejection: motivo da recusa, sem conteúdo", () => {
+  const schemas = { go: (i: unknown) => (typeof i === "object" && i !== null ? ({} as Record<string, never>) : null) };
+  it.each([
+    ["bla bla", "json_invalid"],
+    ['{"type":"outro"}', "type_unknown"],
+    ['{"type":"reply"}', "message_invalid"],
+    ['{"type":"action","action":"apagar_tudo","input":{}}', "action_not_allowed"],
+    ['{"type":"action","action":"go","input":5}', "input_invalid"],
+  ])("%s -> %s", async (raw, expected) => {
+    const { explainRejection } = await import("../shared/ai/decision.js");
+    expect(explainRejection(raw, schemas)).toBe(expected);
+  });
+});

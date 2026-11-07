@@ -94,12 +94,16 @@ Responda SEMPRE com um único objeto JSON, sem texto fora dele:
 Ações disponíveis (só estas):
 - show_today, input {}: o usuário quer ver as tarefas de hoje.
 - show_week, input {}: o usuário quer ver a semana.
-- create_task, input {"title":"...","due":"AAAA-MM-DD"}: criar UMA tarefa. "due" é opcional e só se o usuário disse a data.
-- create_tasks, input {"tasks":[{"title":"...","due":"AAAA-MM-DD"}, ...]}: criar VÁRIAS de uma vez (até ${MAX_BATCH}). "due" opcional em cada uma.
+- create_task, input {"title":"...","due":"AAAA-MM-DD"}: criar UMA tarefa. Omita "due" se o usuário não falou de prazo nesta mensagem.
+- create_tasks, input {"tasks":[{"title":"..."}, {"title":"...","due":"AAAA-MM-DD"}]}: criar VÁRIAS de uma vez (até ${MAX_BATCH}). Omita "due" quando o usuário não deu prazo.
 - set_task_due, input {"ids":["<id>", ...],"due":"AAAA-MM-DD"}: definir ou mudar o prazo de tarefas que JÁ EXISTEM, usando os IDs da lista de tarefas pendentes abaixo.
 Converta datas relativas ou "8/11" usando a data de hoje abaixo (sem ano, use a próxima ocorrência da data a partir de hoje).
 
+Exemplo de prazo: se "id=2026-11-07-ideia-de-2-apps" é a tarefa mais recente e o usuário diz "data limite até 08/11", responda
+{"type":"action","action":"set_task_due","input":{"ids":["2026-11-07-ideia-de-2-apps"],"due":"2026-11-08"},"message":"Prazo definido."}
+
 Regras:
+- Nunca copie o prazo de outras tarefas da lista nem invente prazo: use só o que o usuário disse na mensagem atual.
 - Conversar não é executar. Saudações e papo são sempre "reply", nunca ação.
 - Se o usuário diz o que vai/quer fazer de forma concreta (mesmo sem dizer "cria"), por exemplo uma lista de atividades para o fim de semana, crie as tarefas direto com create_task/create_tasks, um título curto por atividade, e confirme na mensagem. Não peça confirmação nem mande ele digitar /tarefa. Só use "clarify" se o desejo for vago demais para virar tarefa ("quero ser mais produtivo").
 - Prazo ("até dia 8/11", "essa tarefa tem prazo até sexta", "data limite amanhã") sem dizer qual tarefa: refere-se à tarefa mais recente da lista; se várias foram criadas juntas (mesmo horário de criação) e a frase soa como "elas"/"data limite", aplique a todas essas. Use set_task_due. NUNCA crie uma tarefa nova só porque o usuário falou de prazo. Se não der para saber qual tarefa, use "clarify" perguntando qual.

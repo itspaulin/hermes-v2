@@ -5,6 +5,7 @@ import { TelegramApiError, type TelegramClient } from "./client.js";
 import { AnswerValidationError } from "../domain/answer.js";
 import { CheckinNotFound, type CheckinRepository } from "../domain/checkin-repository.js";
 import { ReviewNotFound, type ReviewRepository } from "../domain/review-repository.js";
+import { NotionApiError, NotionUnavailable } from "../notion/errors.js";
 import { MetaNotFound, MetaValidationError, type MetaRepository } from "../domain/meta-repository.js";
 import { TaskNotFound, TaskValidationError, type TaskRepository } from "../domain/task-repository.js";
 import { VaultApiError, VaultConflict, VaultInvalidNote, VaultUnavailable } from "../vault/errors.js";
@@ -177,6 +178,15 @@ function describeError(err: unknown): { kind: "reply"; text: string } | { kind: 
     // Token/permissão/repo/branch: reenviar não adianta e prenderia a fila do Telegram.
     console.error(`[vault] ${err.message}`);
     return { kind: "reply", text: "Não consegui acessar o Vault (erro de configuração ou permissão). Veja os logs." };
+  }
+  if (err instanceof NotionApiError) {
+    // Token/permissão/banco/propriedade: reenviar não adianta e prenderia a fila do Telegram.
+    console.error(`[notion] ${err.message}`);
+    return { kind: "reply", text: "Não consegui acessar o Notion (erro de configuração ou permissão). Veja os logs." };
+  }
+  if (err instanceof NotionUnavailable) {
+    console.error(`[notion] ${err.message}`);
+    return { kind: "retry" };
   }
   if (err instanceof VaultUnavailable) {
     console.error(`[vault] ${err.message}`);

@@ -1,8 +1,12 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda";
 import { CheckinRepository } from "./domain/checkin-repository.js";
 import { ReviewRepository } from "./domain/review-repository.js";
-import { MetaRepository } from "./domain/meta-repository.js";
-import { TaskRepository } from "./domain/task-repository.js";
+import { VaultMetaRepository } from "./domain/meta-repository.js";
+import { createNotionClient } from "./notion/client.js";
+import { loadNotionConfig } from "./notion/config.js";
+import { NotionMetaRepository } from "./notion/meta-repository.js";
+import { NotionTaskRepository } from "./notion/task-repository.js";
+import { VaultTaskRepository } from "./domain/task-repository.js";
 import { loadConverse } from "../shared/ai/bedrock.js";
 import { loadAiConfig } from "../shared/ai/config.js";
 import { createNeonHistory, type ChatHistory } from "./ai/history.js";
@@ -45,15 +49,22 @@ let cached: Promise<Route> | undefined;
 async function build(): Promise<Route> {
   const ssm = createSsmReader();
   // Telegram e Vault em paralelo: 4 GetParameter no total, só no cold start.
-  const [config, vault] = await Promise.all([
+  const [config, vault, notion] = await Promise.all([
     loadTelegramConfig(ssm, telegramParamNamesFromEnv(process.env)),
     loadVaultConfig(ssm, process.env),
+    loadNotionConfig(ssm, process.env),
   ]);
   const store = createGitHubVaultStore(vault);
   const client = createTelegramClient(config.botToken);
+  // Tarefas e metas: Notion se configurado, senão Vault. Check-ins e revisões seguem no Vault.
+  const notionRepos = notion && (() => {
+    const notionClient = createNotionClient({ token: notion.token });
+    const metas = new NotionMetaRepository(notionClient, notion.metasDatabaseId);
+    return { tasks: new NotionTaskRepository(notionClient, notion.tasksDatabaseId, metas, systemClock), metas };
+  })();
   const repos = {
-    tasks: new TaskRepository(store, systemClock),
-    metas: new MetaRepository(store, systemClock),
+    tasks: notionRepos?.tasks ?? new VaultTaskRepository(store, systemClock),
+    metas: notionRepos?.metas ?? new VaultMetaRepository(store, systemClock),
     checkins: new CheckinRepository(store, systemClock),
     reviews: new ReviewRepository(store, systemClock),
   };

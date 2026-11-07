@@ -59,6 +59,24 @@ export interface PendingListing {
   skipped: { path: string; reason: string }[];
 }
 
+/** O que o resto do Hermes precisa das tarefas. Implementações: Vault (Markdown) e Notion. */
+export interface TaskRepository {
+  /** Valida a entrada e calcula o que `create` gravaria, sem tocar no armazenamento. */
+  plan(input: CreateTaskInput): { id: string; title: string; createdAt: string };
+  /** Idempotente: mesmo evento/título gera o mesmo ID; se já existe, devolve a existente. */
+  create(input: CreateTaskInput): Promise<{ task: Task; created: boolean }>;
+  find(id: string): Promise<Task | null>;
+  /** Idempotente. `changed` = false se já estava feita. */
+  complete(id: string): Promise<{ task: Task; changed: boolean }>;
+  /** Idempotente. `changed` = false se já estava cancelada. */
+  cancel(id: string): Promise<{ task: Task; changed: boolean }>;
+  /** Só tarefas pendentes mudam de prazo. Idempotente com o mesmo prazo. */
+  setDue(id: string, due: LocalDate): Promise<{ task: Task; changed: boolean }>;
+  listPending(): Promise<PendingListing>;
+  /** Tarefas de qualquer status (para estatísticas). */
+  listAll(): Promise<PendingListing>;
+}
+
 /**
  * Tarefas sobre um VaultStore. Não conhece Telegram nem GitHub.
  * O store recebido deve ser o guardado (guardVaultStore).
@@ -67,7 +85,7 @@ export interface PendingListing {
  * campos do Hermes com lock otimista por sha, releitura e reaplicação em conflito
  * (até MAX_ATTEMPTS) e NUNCA escrita forçada. O corpo da nota nunca é tocado.
  */
-export class TaskRepository {
+export class VaultTaskRepository implements TaskRepository {
   constructor(
     private readonly store: VaultStore,
     private readonly clock: Clock,
@@ -78,29 +96,7 @@ export class TaskRepository {
    * perguntar algo antes de criar usa isto para falhar cedo e para saber o ID.
    */
   plan(input: CreateTaskInput): { id: string; title: string; createdAt: string } {
-    const title = normalizeTitle(input.title);
-    let slug: string;
-    try {
-      slug = slugify(title);
-    } catch {
-      throw new TaskValidationError("Título sem letras ou números aproveitáveis");
-    }
-    if (input.due !== undefined) validateDue(input.due);
-    if (input.meta !== undefined && !isSlug(input.meta)) {
-      throw new TaskValidationError(`ID de meta inválido: ${input.meta}`);
-    }
-    if (input.idDate !== undefined) validateDue(input.idDate);
-
-    // Tempo do evento (não o relógio): um reenvio depois da meia-noite mantém o ID.
-    let date: LocalDate;
-    let createdAt: string;
-    try {
-      date = input.idDate ?? localDateOfEpochSeconds(input.eventEpochSeconds);
-      createdAt = instantIsoOfEpochSeconds(input.eventEpochSeconds);
-    } catch {
-      throw new TaskValidationError("Instante do evento inválido");
-    }
-    return { id: `${date}-${slug}`, title, createdAt };
+    return planTask(input);
   }
 
   /** Idempotente: mesmo evento/título gera o mesmo ID; se já existe, devolve a existente. */
@@ -237,6 +233,36 @@ export class TaskRepository {
   }
 }
 
+/**
+ * Valida a entrada e calcula ID, título normalizado e instante de criação. Puro: compartilhado
+ * por todas as implementações de TaskRepository.
+ */
+export function planTask(input: CreateTaskInput): { id: string; title: string; createdAt: string } {
+  const title = normalizeTitle(input.title);
+  let slug: string;
+  try {
+    slug = slugify(title);
+  } catch {
+    throw new TaskValidationError("Título sem letras ou números aproveitáveis");
+  }
+  if (input.due !== undefined) validateDue(input.due);
+  if (input.meta !== undefined && !isSlug(input.meta)) {
+    throw new TaskValidationError(`ID de meta inválido: ${input.meta}`);
+  }
+  if (input.idDate !== undefined) validateDue(input.idDate);
+
+  // Tempo do evento (não o relógio): um reenvio depois da meia-noite mantém o ID.
+  let date: LocalDate;
+  let createdAt: string;
+  try {
+    date = input.idDate ?? localDateOfEpochSeconds(input.eventEpochSeconds);
+    createdAt = instantIsoOfEpochSeconds(input.eventEpochSeconds);
+  } catch {
+    throw new TaskValidationError("Instante do evento inválido");
+  }
+  return { id: `${date}-${slug}`, title, createdAt };
+}
+
 function normalizeTitle(raw: string): string {
   const title = raw.replace(/\s+/g, " ").trim();
   if (title === "") throw new TaskValidationError("Título vazio");
@@ -247,7 +273,7 @@ function normalizeTitle(raw: string): string {
   return title;
 }
 
-function validateDue(due: string): void {
+export function validateDue(due: string): void {
   try {
     parseLocalDate(due);
   } catch {
@@ -256,7 +282,7 @@ function validateDue(due: string): void {
 }
 
 /** Com prazo primeiro (mais cedo antes), sem prazo depois; desempate por ID. */
-function compareTasks(a: Task, b: Task): number {
+export function compareTasks(a: Task, b: Task): number {
   if (a.due && b.due && a.due !== b.due) return a.due < b.due ? -1 : 1;
   if (a.due && !b.due) return -1;
   if (!a.due && b.due) return 1;

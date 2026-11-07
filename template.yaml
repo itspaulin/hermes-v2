@@ -32,6 +32,19 @@ Parameters:
     Default: /renato/prod/telegram
     Description: Prefixo dos parâmetros SecureString do bot independente do Renato
 
+  NotionTokenParam:
+    Type: String
+    Default: /hermes/prod/notion/token
+    Description: Nome (não o valor) do parâmetro SecureString com o token da integração do Notion
+  NotionTasksDb:
+    Type: String
+    Default: ""
+    Description: ID (32 caracteres) do banco Tarefas do Notion. Vazio = tarefas e metas continuam no Vault.
+  NotionMetasDb:
+    Type: String
+    Default: ""
+    Description: ID (32 caracteres) do banco Metas do Notion. Preencha junto com NotionTasksDb.
+
   AiEnabled:
     Type: String
     Default: "false"
@@ -101,6 +114,9 @@ Resources:
           BEDROCK_API_KEY_PARAM: !Ref BedrockApiKeyParam
           BEDROCK_REGION: !Ref BedrockRegion
           NEON_DATABASE_URL_PARAM: !Ref NeonDatabaseUrlParam
+          NOTION_TOKEN_PARAM: !Ref NotionTokenParam
+          NOTION_TASKS_DB: !Ref NotionTasksDb
+          NOTION_METAS_DB: !Ref NotionMetasDb
           AI_MAX_HISTORY_MESSAGES: !Ref AiMaxHistoryMessages
           AI_MAX_INPUT_CHARS: !Ref AiMaxInputChars
           AI_MAX_OUTPUT_TOKENS: !Ref AiMaxOutputTokens
@@ -117,6 +133,7 @@ Resources:
                 # API key do Bedrock: a chamada usa a key (bearer), não a role, então a role só lê o parâmetro.
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${BedrockApiKeyParam}"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NeonDatabaseUrlParam}"
+                - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NotionTokenParam}"
       Events:
         TelegramWebhook:
           Type: HttpApi

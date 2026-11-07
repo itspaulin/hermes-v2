@@ -51,43 +51,29 @@ export interface MetaListing {
   skipped: { path: string; reason: string }[];
 }
 
+/** O que o resto do Hermes precisa das metas. Implementações: Vault (Markdown) e Notion. */
+export interface MetaRepository {
+  create(input: CreateMetaInput): Promise<{ meta: Meta; created: boolean }>;
+  find(id: string): Promise<Meta | null>;
+  /** Todas as metas legíveis (qualquer status). */
+  list(): Promise<MetaListing>;
+  /** Idempotente. `changed` = false se já estava no status pedido. */
+  setStatus(id: string, target: MetaStatus): Promise<{ meta: Meta; changed: boolean }>;
+}
+
 /**
  * Metas sobre um VaultStore, com o mesmo contrato das tarefas (docs/vault-contract.md):
  * criar-se-não-existir, alterar por set com lock otimista, corpo nunca tocado.
  * O ID é o slug do título (sem data): o mesmo título é a mesma meta.
  */
-export class MetaRepository {
+export class VaultMetaRepository implements MetaRepository {
   constructor(
     private readonly store: VaultStore,
     private readonly clock: Clock,
   ) {}
 
   async create(input: CreateMetaInput): Promise<{ meta: Meta; created: boolean }> {
-    const title = input.title.replace(/\s+/g, " ").trim();
-    if (title === "") throw new MetaValidationError("Título vazio");
-    if (title.length > MAX_TITLE_LENGTH) {
-      throw new MetaValidationError(`Título longo demais (máximo ${MAX_TITLE_LENGTH} caracteres)`);
-    }
-    if (/[\u0000-\u001f\u007f]/.test(title)) throw new MetaValidationError("Título com caracteres de controle");
-    let id: string;
-    try {
-      id = slugify(title);
-    } catch {
-      throw new MetaValidationError("Título sem letras ou números aproveitáveis");
-    }
-    if (input.due !== undefined) {
-      try {
-        parseLocalDate(input.due);
-      } catch {
-        throw new MetaValidationError(`Data inválida: ${input.due}`);
-      }
-    }
-    let createdAt: string;
-    try {
-      createdAt = instantIsoOfEpochSeconds(input.eventEpochSeconds);
-    } catch {
-      throw new MetaValidationError("Instante do evento inválido");
-    }
+    const { title, id, createdAt } = planMeta(input);
 
     const path = metaPath(id);
     const content = renderNote(
@@ -173,8 +159,38 @@ export class MetaRepository {
   }
 }
 
+/** Valida a entrada e calcula título normalizado, ID (slug) e instante de criação. Puro: compartilhado pelas implementações. */
+export function planMeta(input: CreateMetaInput): { title: string; id: string; createdAt: string } {
+  const title = input.title.replace(/\s+/g, " ").trim();
+  if (title === "") throw new MetaValidationError("Título vazio");
+  if (title.length > MAX_TITLE_LENGTH) {
+    throw new MetaValidationError(`Título longo demais (máximo ${MAX_TITLE_LENGTH} caracteres)`);
+  }
+  if (/[\u0000-\u001f\u007f]/.test(title)) throw new MetaValidationError("Título com caracteres de controle");
+  let id: string;
+  try {
+    id = slugify(title);
+  } catch {
+    throw new MetaValidationError("Título sem letras ou números aproveitáveis");
+  }
+  if (input.due !== undefined) {
+    try {
+      parseLocalDate(input.due);
+    } catch {
+      throw new MetaValidationError(`Data inválida: ${input.due}`);
+    }
+  }
+  let createdAt: string;
+  try {
+    createdAt = instantIsoOfEpochSeconds(input.eventEpochSeconds);
+  } catch {
+    throw new MetaValidationError("Instante do evento inválido");
+  }
+  return { title, id, createdAt };
+}
+
 /** Com prazo primeiro (mais cedo antes), sem prazo depois; desempate por ID. */
-function compareMetas(a: Meta, b: Meta): number {
+export function compareMetas(a: Meta, b: Meta): number {
   if (a.due && b.due && a.due !== b.due) return a.due < b.due ? -1 : 1;
   if (a.due && !b.due) return -1;
   if (!a.due && b.due) return 1;

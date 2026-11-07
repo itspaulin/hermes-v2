@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { TaskNotFound, TaskRepository, TaskValidationError, type CreateTaskInput } from "../src/domain/task-repository.js";
+import { TaskNotFound, VaultTaskRepository, TaskValidationError, type CreateTaskInput } from "../src/domain/task-repository.js";
 import { parseTask, taskPath } from "../src/domain/task.js";
 import { fakeClock } from "../src/time/index.js";
 import { VaultConflict, VaultInvalidNote } from "../src/vault/errors.js";
@@ -86,7 +86,7 @@ describe.each([
 function setup(nowIso = "2026-09-25T18:10:00Z") {
   const mem = makeBackend();
   const clock = fakeClock(nowIso);
-  const repo = new TaskRepository(mem.store, clock);
+  const repo = new VaultTaskRepository(mem.store, clock);
   return { mem, clock, repo };
 }
 

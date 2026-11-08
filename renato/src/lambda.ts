@@ -3,7 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-lambda";
 import { loadConverse } from "../../shared/ai/bedrock.js";
 import { loadAiConfig } from "../../shared/ai/config.js";
-import { createNeonHistory, type ChatHistory } from "../../shared/ai/history.js";
+import { createNeonHistory } from "../../shared/ai/history.js";
 import { createTelegramHandler, type HttpResponse } from "./handler.js";
 import { createRenatoAi, createRenatoConversation, explicitCapture, HELP_TEXT, CAPTURE_COMMAND, type RenatoConversation } from "./conversation.js";
 import { parseTelegramUpdate, pickImage } from "./telegram.js";
@@ -12,6 +12,7 @@ import { NotionApiError, NotionUnavailable } from "../../shared/notion/errors.js
 import { createNotionAi, createNotionAssistant, type NotionAssistant, type TurnInput } from "./notion/assistant.js";
 import { createImageCapture, createVerbatimCapture } from "./notion/capture.js";
 import { createNotionCommands, type NotionCommands } from "./notion/commands.js";
+import { createNeonUndoLog } from "./notion/undo-log.js";
 import { loadRenatoNotion } from "./notion/config.js";
 import { systemClock } from "./clock.js";
 import { GitHubNoteRepository, type HttpClient } from "./github-repository.js";
@@ -43,7 +44,7 @@ export interface RenatoWebhookDeps {
   };
 }
 
-export const NOTION_HELP_TEXT = `Converse comigo normalmente: mande o que estudou e eu organizo no Notion, ou pergunte o que você já tem. Comandos: ${CAPTURE_COMMAND} <texto> guarda o texto exato; /tema <nome> cria um tema (ou move a nota, se você responder à mensagem dela); /notas lista suas notas.`;
+export const NOTION_HELP_TEXT = `Converse comigo normalmente: mande o que estudou (texto ou imagem), peça para listar suas notas, criar ou excluir temas, mover ou complementar notas, ou desfazer a última coisa que eu fiz. Atalhos opcionais: ${CAPTURE_COMMAND} <texto> guarda o texto exato; /tema <nome>; /notas; /guardar na legenda de uma imagem.`;
 export const IMAGE_ERRORS = {
   too_big: "Essa imagem é grande demais (o limite é 3,5 MB). Reduza o tamanho e envie de novo.",
   not_image: "Não reconheci esse arquivo como imagem. Aceito PNG, JPEG, GIF e WEBP.",
@@ -304,13 +305,12 @@ function createRepository(config: RuntimeConfig): NoteRepository {
   }, http);
 }
 
-/** Memória da conversa (Neon). Opcional: sem o parâmetro ou com falha ao lê-lo, o Renato conversa sem histórico. */
-async function loadHistory(ssm: SSMClient, maxMessages: number): Promise<ChatHistory | undefined> {
+/** Connection string do Neon (memória da conversa e registro de ações). Opcional: sem o parâmetro ou com falha ao lê-lo, o Renato segue sem memória e sem "desfaz". */
+async function loadNeonUrl(ssm: SSMClient): Promise<string | undefined> {
   const param = process.env.NEON_DATABASE_URL_PARAM?.trim();
   if (!param) return undefined;
   try {
-    // Mensagens longas (notas inteiras) são cortadas a 600 caracteres: o contexto serve para esclarecer, não para repetir a nota.
-    return createNeonHistory(await readParameter(ssm, param), { table: "renato_chat_history", maxMessages, maxChars: 600 });
+    return await readParameter(ssm, param);
   } catch (err) {
     console.error(`[history] desligado: ${err instanceof Error ? err.message : "erro"}`);
     return undefined;
@@ -339,13 +339,16 @@ async function buildProductionHandler() {
   const aiConfig = loadAiConfig(process.env);
   const bedrock = aiConfig ? await loadConverse(aiConfig, (name) => readParameter(ssm, name)) : undefined;
   const conversation = aiConfig && bedrock ? createRenatoConversation(createRenatoAi(aiConfig, bedrock)) : undefined;
-  const history = notionRepos && aiConfig && bedrock ? await loadHistory(ssm, aiConfig.maxHistoryMessages) : undefined;
+  const neonUrl = notionRepos && aiConfig && bedrock ? await loadNeonUrl(ssm) : undefined;
+  // Mensagens longas (notas inteiras) são cortadas a 600 caracteres: o contexto serve para esclarecer, não para repetir a nota.
+  const history = neonUrl && aiConfig ? createNeonHistory(neonUrl, { table: "renato_chat_history", maxMessages: aiConfig.maxHistoryMessages, maxChars: 600 }) : undefined;
+  const undoLog = neonUrl ? createNeonUndoLog(neonUrl) : undefined;
   const notion = notionRepos && {
     capture: createVerbatimCapture(notionRepos),
     commands: createNotionCommands(notionRepos),
     downloadImage: (fileId: string) => downloadTelegramImage(config.botToken, fileId),
     captureImage: createImageCapture({ ...notionRepos, upload: notionRepos.client.upload }),
-    ...(aiConfig && bedrock && { assistant: createNotionAssistant({ ai: createNotionAi(aiConfig, bedrock), ...notionRepos, upload: notionRepos.client.upload, ...(history && { history }) }) }),
+    ...(aiConfig && bedrock && { assistant: createNotionAssistant({ ai: createNotionAi(aiConfig, bedrock), ...notionRepos, upload: notionRepos.client.upload, ...(history && { history }), ...(undoLog && { undoLog }) }) }),
   };
   return createRenatoWebhookHandler({
     ...(conversation && { conversation }),

@@ -167,11 +167,28 @@ export class NotasRepository {
     return this.parseAll(res.results as NotionPage[], query.temas);
   }
 
-  /** Acrescenta blocos ao fim da página (em lotes de 100). Não altera nada que já esteja nela. */
-  async append(pageId: string, blocks: readonly Block[]): Promise<void> {
+  /** Acrescenta blocos ao fim da página (em lotes de 100). Não altera nada que já esteja nela. Devolve os IDs dos blocos criados (para desfazer). */
+  async append(pageId: string, blocks: readonly Block[]): Promise<string[]> {
+    const ids: string[] = [];
     for (let i = 0; i < blocks.length; i += MAX_BLOCKS_PER_REQUEST) {
-      await this.client.request("PATCH", `/v1/blocks/${pageId}/children`, { children: blocks.slice(i, i + MAX_BLOCKS_PER_REQUEST) });
+      const res = await this.client.request("PATCH", `/v1/blocks/${pageId}/children`, { children: blocks.slice(i, i + MAX_BLOCKS_PER_REQUEST) });
+      for (const r of (res?.results ?? []) as { id?: string }[]) if (typeof r.id === "string") ids.push(r.id);
     }
+    return ids;
+  }
+
+  /** Remove blocos (vão para a lixeira do Notion). Só para desfazer o que o próprio Renato acrescentou. */
+  async deleteBlocks(blockIds: readonly string[]): Promise<void> {
+    for (const id of blockIds) await this.client.request("DELETE", `/v1/blocks/${id}`);
+  }
+
+  /** Arquivar = lixeira do Notion (restaura de lá ou com `unarchive`). Nunca apaga de verdade. */
+  async archive(pageId: string): Promise<void> {
+    await this.client.request("PATCH", `/v1/pages/${pageId}`, { archived: true });
+  }
+
+  async unarchive(pageId: string): Promise<void> {
+    await this.client.request("PATCH", `/v1/pages/${pageId}`, { archived: false });
   }
 
   /** Move a nota para outro tema (só a relação muda). */

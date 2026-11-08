@@ -60,4 +60,15 @@ O Renato grava as notas de estudo em dois bancos do Notion (código em `renato/s
 - **`/notas`** lista as 10 mais recentes; `/notas <tema>` lista as do tema e dos subtemas; `/notas <texto>` busca no título e no resumo. Sem modelo.
 - **Imagens**: foto ou arquivo de imagem (PNG, JPEG, GIF, WEBP, até 3,5 MB; formato conferido pelos bytes) é baixada do Telegram, lida pelo modelo (visão) e subida ao Notion pela API de upload de arquivos; entra na página como bloco de imagem logo depois do resumo, com `Origem` = `imagem`. A transcrição da imagem vem do modelo e a página avisa que pode ter erros; a legenda vira "Legenda: …" na transcrição e também orienta tema e complemento ("adiciona essa imagem na nota X" acrescenta um complemento com a imagem). **`/guardar` na legenda** guarda a imagem na Caixa de entrada sem modelo (título = 1ª linha da legenda, ou "Imagem DD/MM/AAAA"); sem IA, toda imagem é guardada assim. Se o Notion recusar o arquivo, a nota sai sem a imagem e o bot avisa; o link de download do Telegram (que carrega o token do bot) nunca vai para a página.
 - Mande como **arquivo** (não como foto) para não perder nitidez: o Telegram comprime fotos. Vários arquivos de uma vez viram uma nota cada (álbum não é agrupado).
-- `/desfazer` ainda não existe.
+
+
+### Tudo por conversa, sem comando
+
+Os comandos `/tema`, `/notas` e `/guardar` são só atalhos; o Renato faz tudo também por frase:
+
+- **Listar**: "lista os 10 mais recentes" (`find_notes` sem filtro, até 20), "o que tenho sobre X", "notas do tema Y".
+- **Criar tema**: "cria o tema Redes", "cria Redes dentro de Programação" (`create_tema`); e temas nascem sozinhos quando uma nota pede um que não existe.
+- **Excluir tema** (`delete_tema`) e **nota** (`delete_note`), só quando você pede. Excluir é arquivar: vai para a lixeira do Notion, não some de vez. A Caixa de entrada não pode ser excluída. Tema vazio sai direto. Tema com notas ou subtemas: o Renato pergunta ("tem N notas e M subtemas… Confirma?") e só com o seu "sim" (ele chama a ação de novo com `confirmar`) as notas vão para o tema pai (ou a Caixa de entrada) e os subtemas sobem um nível.
+- **Desfazer** (`undo`): "desfaz", "volta atrás". Desfaz a última ação do Renato que mudou o Notion: nota criada (e o tema que ela criou, se ficou vazio), complemento (remove só os blocos acrescentados), tema criado (não remove se já ganhou notas), nota movida, tema excluído (volta com as notas e subtemas) e nota excluída. "Desfaz o tema X" é excluir o tema X.
+- O registro das ações fica no Neon (`renato_undo`, últimas 24 h para desfazer, 7 dias de retenção; `renato_undo_seen` impede que o reenvio do Telegram do próprio "desfaz" desfaça uma segunda ação). Sem o Neon o Renato age normalmente, mas responde que não consegue desfazer.
+- Reenvios do Telegram não repetem complemento, exclusão ou movimentação (o registro guarda uma ação por mensagem).

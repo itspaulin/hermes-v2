@@ -13,8 +13,15 @@ export type TemaChoice = { existente: string } | { novo: string; pai?: string } 
 export type RenatoNotionActions = {
   save_note: { titulo: string; resumo: string; tipo: Tipo; tema: TemaChoice; conteudo: NoteContent };
   append_to_note: { id: string; conteudo: NoteContent };
-  find_notes: { texto?: string; tema?: string };
+  /** Sem texto nem tema: as notas mais recentes (até `limite`, 10 por padrão). */
+  find_notes: { texto?: string; tema?: string; limite?: number };
   move_note: { id: string; tema: NonNullable<TemaChoice> };
+  create_tema: { nome: string; pai?: string };
+  /** Arquiva o tema (lixeira do Notion). Com notas ou subtemas, só com `confirmar`. */
+  delete_tema: { tema: string; confirmar: boolean };
+  delete_note: { id: string };
+  /** Desfaz a última ação do Renato que mudou o Notion. */
+  undo: Record<string, never>;
 };
 
 export const MAX_TITLE = 120;
@@ -96,11 +103,12 @@ export const appendToNoteInput: InputValidator<RenatoNotionActions["append_to_no
 };
 
 export const findNotesInput: InputValidator<RenatoNotionActions["find_notes"]> = (raw) => {
-  if (!isRecord(raw)) return null;
-  const texto = line(raw.texto, 100);
-  const tema = line(raw.tema, 100);
-  if (texto === null && tema === null) return null;
-  return { ...(texto !== null && { texto }), ...(tema !== null && { tema }) };
+  if (raw !== undefined && raw !== null && !isRecord(raw)) return null;
+  const r = isRecord(raw) ? raw : {};
+  const texto = line(r.texto, 100);
+  const tema = line(r.tema, 100);
+  const limite = typeof r.limite === "number" && Number.isInteger(r.limite) && r.limite >= 1 ? Math.min(r.limite, 20) : undefined;
+  return { ...(texto !== null && { texto }), ...(tema !== null && { tema }), ...(limite !== undefined && { limite }) };
 };
 
 export const moveNoteInput: InputValidator<RenatoNotionActions["move_note"]> = (raw) => {
@@ -109,3 +117,24 @@ export const moveNoteInput: InputValidator<RenatoNotionActions["move_note"]> = (
   const tema = temaChoice(raw.tema);
   return id === null || tema === undefined || tema === null ? null : { id, tema };
 };
+
+export const createTemaInput: InputValidator<RenatoNotionActions["create_tema"]> = (raw) => {
+  if (!isRecord(raw)) return null;
+  const nome = line(raw.nome, 100);
+  const pai = line(raw.pai, 100);
+  return nome === null ? null : { nome, ...(pai !== null && { pai }) };
+};
+
+export const deleteTemaInput: InputValidator<RenatoNotionActions["delete_tema"]> = (raw) => {
+  if (!isRecord(raw)) return null;
+  const tema = line(raw.tema, 100);
+  return tema === null ? null : { tema, confirmar: raw.confirmar === true };
+};
+
+export const deleteNoteInput: InputValidator<RenatoNotionActions["delete_note"]> = (raw) => {
+  if (!isRecord(raw)) return null;
+  const id = line(raw.id, 100);
+  return id === null ? null : { id };
+};
+
+export const undoInput: InputValidator<RenatoNotionActions["undo"]> = () => ({});

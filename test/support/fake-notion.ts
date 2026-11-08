@@ -15,6 +15,7 @@ export interface FakePage {
   url?: string;
   /** Blocos do corpo da página (create com `children` e PATCH /blocks/:id/children). */
   children?: any[];
+  archived?: boolean;
 }
 
 export class FakeNotion implements NotionClient {
@@ -58,14 +59,21 @@ export class FakeNotion implements NotionClient {
       const page = this.pages.find((p) => p.id === blocks[1]);
       if (!page) throw Object.assign(new Error("not found"), { name: "NotionApiError" });
       if (body.children.length > 100) throw new Error("mais de 100 blocos por requisição");
-      (page.children ??= []).push(...body.children);
-      return { results: [] };
+      const withIds = body.children.map((c: any) => ({ ...c, id: `block-${++this.n}` }));
+      (page.children ??= []).push(...withIds);
+      return { results: withIds.map((c: any) => ({ id: c.id, type: c.type })) };
+    }
+    const delBlock = /^\/v1\/blocks\/([^/]+)$/.exec(path);
+    if (method === "DELETE" && delBlock) {
+      for (const p of this.pages) p.children = (p.children ?? []).filter((c: any) => c.id !== delBlock[1]);
+      return { id: delBlock[1], archived: true };
     }
     const patch = /^\/v1\/pages\/([^/]+)$/.exec(path);
     if (method === "PATCH" && patch) {
       const page = this.pages.find((p) => p.id === patch[1]);
       if (!page) throw Object.assign(new Error("not found"), { name: "NotionApiError" });
-      page.properties = { ...page.properties, ...normalize(body.properties) };
+      if (body.archived !== undefined) page.archived = body.archived;
+      if (body.properties) page.properties = { ...page.properties, ...normalize(body.properties) };
       page.last_edited_time = this.stamp();
       return out(page);
     }
@@ -95,7 +103,7 @@ export class FakeNotion implements NotionClient {
 
   private query(db: string, body: any) {
     if ((body.page_size ?? 100) > 100) throw new Error("page_size acima de 100");
-    const all = this.pages.filter((p) => p.database === db && matches(p, body.filter));
+    const all = this.pages.filter((p) => p.database === db && !p.archived && matches(p, body.filter));
     const sort = body.sorts?.[0];
     if (sort?.direction === "descending") {
       const key = sort.timestamp === "last_edited_time" ? "last_edited_time" : "created_time";

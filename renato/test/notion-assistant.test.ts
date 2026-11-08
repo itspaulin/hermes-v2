@@ -203,7 +203,6 @@ describe("conversa, contexto e falhas", () => {
       json(action("save_note", { titulo: "x", resumo: "x", conteudo: { topicos: [{ titulo: "" }] } })), // sem conteúdo aproveitável
       json(action("save_note", { titulo: "x", resumo: "x", tema: { novo: "" }, conteudo: content })),
       json(action("apagar_tudo", {})),
-      json(action("find_notes", {})),
       json(action("move_note", { id: "a", tema: null })),
     ]) {
       expect(await assistant(converse)("texto")).toBe(AI_UNAVAILABLE_TEXT);

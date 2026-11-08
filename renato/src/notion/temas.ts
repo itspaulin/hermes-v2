@@ -24,6 +24,8 @@ export interface Tema {
   name: string;
   /** ID (slug) do tema pai. */
   parentId?: string;
+  /** Página do Notion do tema pai. */
+  parentPageId?: string;
   created: string;
 }
 
@@ -47,7 +49,14 @@ function parse(page: NotionPage, slugByPage: Map<string, string>): Tema | null {
   }
   const [parentPage] = relationIds(page.properties[P.parent]);
   const parentId = parentPage === undefined ? undefined : slugByPage.get(parentPage);
-  return { id, pageId: page.id, name, created: instantOf(page.properties[P.created], page.created_time)!, ...(parentId !== undefined && { parentId }) };
+  return {
+    id,
+    pageId: page.id,
+    name,
+    created: instantOf(page.properties[P.created], page.created_time)!,
+    ...(parentId !== undefined && { parentId }),
+    ...(parentPage !== undefined && { parentPageId: parentPage }),
+  };
 }
 
 /**
@@ -116,7 +125,21 @@ export class TemaRepository {
         ...(parent && { [P.parent]: relationProp([parent.pageId]) }),
       },
     });
-    return { tema: { id, pageId: page.id, name: clean, created: createdAt, ...(parent && { parentId: parent.id }) }, created: true };
+    return { tema: { id, pageId: page.id, name: clean, created: createdAt, ...(parent && { parentId: parent.id, parentPageId: parent.pageId }) }, created: true };
+  }
+
+  /** Arquivar = lixeira do Notion (dá para restaurar de lá ou com `unarchive`). Nunca apaga de verdade. */
+  async archive(pageId: string): Promise<void> {
+    await this.client.request("PATCH", `/v1/pages/${pageId}`, { archived: true });
+  }
+
+  async unarchive(pageId: string): Promise<void> {
+    await this.client.request("PATCH", `/v1/pages/${pageId}`, { archived: false });
+  }
+
+  /** Muda o tema pai (null = primeiro nível). Só a relação `Tema pai` é alterada. */
+  async setParent(pageId: string, parentPageId: string | null): Promise<void> {
+    await this.client.request("PATCH", `/v1/pages/${pageId}`, { properties: { [P.parent]: relationProp(parentPageId === null ? [] : [parentPageId]) } });
   }
 
   /** A "Caixa de entrada": existe sempre (criada na primeira vez). */

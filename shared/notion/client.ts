@@ -2,7 +2,7 @@ import { NotionApiError, NotionUnavailable } from "./errors.js";
 
 /** Cliente mínimo da API do Notion. Interface pequena para poder trocar por um falso nos testes. */
 export interface NotionClient {
-  request(method: "GET" | "POST" | "PATCH", path: string, body?: unknown): Promise<any>;
+  request(method: "GET" | "POST" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<any>;
   /** Sobe um arquivo para o Notion (criar o upload e enviar os bytes) e devolve o ID para usar em blocos de imagem. */
   upload(filename: string, contentType: string, bytes: Uint8Array): Promise<string>;
 }

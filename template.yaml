@@ -17,7 +17,7 @@ Parameters:
 
   VaultRepo:
     Type: String
-    Default: itspaulin/obsidian-vault
+    Default: paulobarbosa-dev/obsidian-vault
     Description: Repositório privado do Vault (owner/repo). Não é segredo.
   VaultBranch:
     Type: String

@@ -137,3 +137,15 @@ describe("explainRejection: motivo da recusa, sem conteúdo", () => {
     expect(explainRejection(raw, schemas)).toBe(expected);
   });
 });
+
+describe("parseDecision: nome da ação no lugar de 'action'", () => {
+  const schemas = { go: (i: unknown) => (typeof i === "object" && i !== null && typeof (i as { x?: unknown }).x === "string" ? ({ x: (i as { x: string }).x }) : null) };
+  it("aceita {type:<ação>, input} e {type:<ação>, ...campos soltos}, só se a ação está na allowlist", async () => {
+    const { parseDecision } = await import("../shared/ai/decision.js");
+    expect(parseDecision('{"type":"go","input":{"x":"a"}}', schemas)).toMatchObject({ type: "action", action: "go", input: { x: "a" } });
+    expect(parseDecision('{"type":"go","x":"b","message":"oi"}', schemas)).toMatchObject({ type: "action", action: "go", input: { x: "b" }, message: "oi" });
+    expect(parseDecision('{"type":"apagar","x":"b"}', schemas)).toBeNull();
+    expect(parseDecision('{"type":"constructor","x":"b"}', schemas)).toBeNull();
+    expect(parseDecision('{"type":"go","y":1}', schemas)).toBeNull(); // input inválido continua recusando
+  });
+});

@@ -84,7 +84,10 @@ export function createAiService<Actions extends Record<string, unknown>>(
 
       const decision = parseDecision<Actions>(response.text, opts.schemas);
       if (!decision) {
-        console.error(`[ai] assistant=${assistant} saida_recusada=${explainRejection(response.text, opts.schemas)}`);
+        const why = explainRejection(response.text, opts.schemas);
+        // Só o valor de `type` (um token estrutural curto), nunca o conteúdo da resposta.
+        const typeValue = why === "type_unknown" ? /"type"\s*:\s*"([a-z_]{1,30})"/.exec(response.text)?.[1] : undefined;
+        console.error(`[ai] assistant=${assistant} saida_recusada=${why}${typeValue ? ` type=${typeValue}` : ""}`);
         return fail("invalid_output");
       }
       console.log(

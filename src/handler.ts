@@ -2,7 +2,7 @@ import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda
 import { CheckinRepository } from "./domain/checkin-repository.js";
 import { ReviewRepository } from "./domain/review-repository.js";
 import { VaultMetaRepository } from "./domain/meta-repository.js";
-import { createNotionClient } from "./notion/client.js";
+import { createNotionClient } from "../shared/notion/client.js";
 import { loadNotionConfig } from "./notion/config.js";
 import { NotionMetaRepository } from "./notion/meta-repository.js";
 import { NotionTaskRepository } from "./notion/task-repository.js";

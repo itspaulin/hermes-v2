@@ -1,5 +1,5 @@
 import { localDateOfInstant, parseLocalDate, type LocalDate } from "../time/index.js";
-import type { NotionClient } from "./client.js";
+import type { NotionClient } from "../../shared/notion/client.js";
 
 /**
  * Leitura e escrita das propriedades dos bancos Tarefas e Metas. Os nomes são o contrato com o Notion

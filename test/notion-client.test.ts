@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { createNotionClient, NOTION_VERSION } from "../src/notion/client.js";
-import { NotionApiError, NotionUnavailable } from "../src/notion/errors.js";
+import { createNotionClient, NOTION_VERSION } from "../shared/notion/client.js";
+import { NotionApiError, NotionUnavailable } from "../shared/notion/errors.js";
 
 const json = (status: number, body: unknown, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });

@@ -8,7 +8,7 @@ import {
   type MetaRepository,
 } from "../domain/meta-repository.js";
 import { isSlug, slugify } from "../vault/slug.js";
-import type { NotionClient } from "./client.js";
+import type { NotionClient } from "../../shared/notion/client.js";
 import {
   byIdProperty,
   dateProp,

@@ -12,7 +12,7 @@ import {
   type TaskRepository,
 } from "../domain/task-repository.js";
 import { slugify } from "../vault/slug.js";
-import type { NotionClient } from "./client.js";
+import type { NotionClient } from "../../shared/notion/client.js";
 import type { NotionMetaRepository } from "./meta-repository.js";
 import {
   byIdProperty,

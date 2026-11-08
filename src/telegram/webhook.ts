@@ -5,7 +5,7 @@ import { TelegramApiError, type TelegramClient } from "./client.js";
 import { AnswerValidationError } from "../domain/answer.js";
 import { CheckinNotFound, type CheckinRepository } from "../domain/checkin-repository.js";
 import { ReviewNotFound, type ReviewRepository } from "../domain/review-repository.js";
-import { NotionApiError, NotionUnavailable } from "../notion/errors.js";
+import { NotionApiError, NotionUnavailable } from "../../shared/notion/errors.js";
 import { MetaNotFound, MetaValidationError, type MetaRepository } from "../domain/meta-repository.js";
 import { TaskNotFound, TaskValidationError, type TaskRepository } from "../domain/task-repository.js";
 import { VaultApiError, VaultConflict, VaultInvalidNote, VaultUnavailable } from "../vault/errors.js";

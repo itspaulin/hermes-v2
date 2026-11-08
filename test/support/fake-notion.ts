@@ -1,4 +1,4 @@
-import type { NotionClient } from "../../src/notion/client.js";
+import type { NotionClient } from "../../shared/notion/client.js";
 
 /**
  * Notion falso em memória: só o que o Hermes usa. POST /v1/databases/:id/query (filtros select

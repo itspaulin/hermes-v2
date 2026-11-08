@@ -1,5 +1,5 @@
 import { createSsmReader } from "../src/ssm.js";
-import { createNotionClient } from "../src/notion/client.js";
+import { createNotionClient } from "../shared/notion/client.js";
 import { loadNotionConfig } from "../src/notion/config.js";
 import { NotionMetaRepository } from "../src/notion/meta-repository.js";
 import { NotionTaskRepository } from "../src/notion/task-repository.js";

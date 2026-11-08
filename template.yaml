@@ -44,6 +44,26 @@ Parameters:
     Type: String
     Default: ""
     Description: ID (32 caracteres) do banco Metas do Notion. Preencha junto com NotionTasksDb.
+  NotionTemasDb:
+    Type: String
+    Default: ""
+    Description: ID (32 caracteres) do banco Temas do Notion (Renato). Vazio = o Renato continua gravando no Vault.
+  NotionNotasDb:
+    Type: String
+    Default: ""
+    Description: ID (32 caracteres) do banco Notas do Notion (Renato). Preencha junto com NotionTemasDb.
+  RenatoAiMaxInputChars:
+    Type: String
+    Default: "6000"
+    Description: Tamanho máximo da mensagem para o Renato organizar em nota (maior que o do Hermes)
+  RenatoAiMaxOutputTokens:
+    Type: String
+    Default: "2000"
+    Description: Tokens de saída do Renato (a nota estruturada é longa). O API Gateway corta em 30 s, então não suba muito
+  RenatoAiTimeoutMs:
+    Type: String
+    Default: "20000"
+    Description: Tempo máximo da chamada ao modelo no Renato (deixa folga dentro dos 30 s do API Gateway)
 
   AiEnabled:
     Type: String
@@ -233,14 +253,19 @@ Resources:
           BEDROCK_API_KEY_PARAM: !Ref BedrockApiKeyParam
           BEDROCK_REGION: !Ref BedrockRegion
           AI_MAX_HISTORY_MESSAGES: !Ref AiMaxHistoryMessages
-          AI_MAX_INPUT_CHARS: !Ref AiMaxInputChars
-          AI_MAX_OUTPUT_TOKENS: !Ref AiMaxOutputTokens
+          AI_MAX_INPUT_CHARS: !Ref RenatoAiMaxInputChars
+          AI_MAX_OUTPUT_TOKENS: !Ref RenatoAiMaxOutputTokens
+          AI_TIMEOUT_MS: !Ref RenatoAiTimeoutMs
+          NOTION_TOKEN_PARAM: !Ref NotionTokenParam
+          NOTION_TEMAS_DB: !Ref NotionTemasDb
+          NOTION_NOTAS_DB: !Ref NotionNotasDb
       Policies:
         - Version: "2012-10-17"
           Statement:
             - Effect: Allow
               Action: ssm:GetParameter
               Resource:
+                - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NotionTokenParam}"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${RenatoSsmPrefix}/bot-token"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${RenatoSsmPrefix}/webhook-secret"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${RenatoSsmPrefix}/allowed-chat-ids"

@@ -34,3 +34,21 @@ Token da integração no SSM (SecureString, padrão `/hermes/prod/notion/token`,
 ## Migração do Vault
 
 `npm run migrate:notion` lê as pastas `Hermes/tarefas` e `Hermes/metas` do clone local do Vault (faça `git pull` antes), e só cria no Notion o que ainda não existe (por ID). Sem `--apply` é ensaio. `--exclude=<id>` deixa de fora um item. Depois de migrar, as notas antigas ficam no Vault como arquivo e o Hermes deixa de lê-las. `npm run smoke:notion` testa o ciclo completo contra os bancos reais e arquiva o que criar.
+
+## Renato: Temas e Notas
+
+O Renato grava as notas de estudo em dois bancos do Notion (código em `renato/src/notion/`), ligado por `NOTION_TEMAS_DB` e `NOTION_NOTAS_DB`; sem eles ele segue gravando no Vault. Usa o mesmo token do Hermes.
+
+**Temas**: `Nome` (title), `ID` (text, slug do nome), `Tema pai` (relation para o próprio Temas), `Criada` (date).
+
+**Notas**: `Nome` (title), `ID` (text, `telegram-<chat>-<mensagem>`), `Resumo` (text), `Tema` (relation para Temas), `Tipo` (select: `conceito`, `diagrama`, `resumo`, `ideia`, `duvida`), `Origem` (select: `texto`, `imagem`), `Estado` (select: `nova`, `revisada`), `Criada` (date).
+
+- **Temas**: o ID é o slug do nome, com `#` virando "sharp" e `+` virando "plus" (C, C# e C++ são temas distintos). Criar um nome que já existe, em qualquer grafia, devolve o existente. A "Caixa de entrada" é criada sozinha e nunca tem subtemas.
+- **Quem escolhe o tema**: o modelo escolhe entre os temas existentes, pede subtema ou tema novo, e o código valida e executa. O usuário pode forçar ("no tema X").
+- **Nota**: o corpo segue uma ordem fixa (resumo, "O que entendi", "Conceitos-chave", "Diagrama", "Mapa mental", "Lacunas e perguntas", e a transcrição original num toggle). A transcrição é sempre a mensagem **original** do usuário, nunca o que o modelo reescreveu. O que o modelo acrescenta fica só em "Lacunas e perguntas (sugestões do Renato)".
+- **Diagramas e mapas mentais** são dados (nós e ligações, ou uma árvore de ramos): o código gera o Mermaid (`flowchart`, com rótulos entre aspas e IDs próprios). O `mindmap` do Mermaid não renderiza no Notion.
+- **Complementar** só acrescenta uma seção "Complemento, DD/MM/AAAA" no fim da página; o que já estava nela nunca é reescrito. Criar é idempotente pelo ID da mensagem do Telegram.
+- Linhas criadas à mão em Notas sem `ID` ou sem título são ignoradas pelo Renato.
+- Ações do modelo: `save_note`, `append_to_note`, `find_notes`, `move_note`. Ação fora da lista ou com entrada inválida não executa nada. `/anotar <texto>` guarda o texto exato na Caixa de entrada, sem modelo.
+- Limites: o API Gateway corta em 30 s, por isso o modelo tem 20 s (`RenatoAiTimeoutMs`) e 2000 tokens de saída (`RenatoAiMaxOutputTokens`); mensagens até 6000 caracteres (`RenatoAiMaxInputChars`).
+- `npm run smoke:notas` testa o ciclo real nos dois bancos e arquiva o que criar (`KEEP=1` deixa as páginas abertas para ver o Mermaid).

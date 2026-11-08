@@ -30,8 +30,8 @@ export function loadAiConfig(env: Env): AiConfig | null {
     region,
     apiKeyParam,
     maxHistoryMessages: positiveInt(env.AI_MAX_HISTORY_MESSAGES, DEFAULTS.maxHistoryMessages, 20),
-    maxInputChars: positiveInt(env.AI_MAX_INPUT_CHARS, DEFAULTS.maxInputChars, 4000),
-    maxOutputTokens: positiveInt(env.AI_MAX_OUTPUT_TOKENS, DEFAULTS.maxOutputTokens, 1000),
-    timeoutMs: positiveInt(env.AI_TIMEOUT_MS, DEFAULTS.timeoutMs, 20000),
+    maxInputChars: positiveInt(env.AI_MAX_INPUT_CHARS, DEFAULTS.maxInputChars, 10000),
+    maxOutputTokens: positiveInt(env.AI_MAX_OUTPUT_TOKENS, DEFAULTS.maxOutputTokens, 4000),
+    timeoutMs: positiveInt(env.AI_TIMEOUT_MS, DEFAULTS.timeoutMs, 25000),
   };
 }

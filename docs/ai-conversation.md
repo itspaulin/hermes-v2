@@ -13,7 +13,8 @@ O modelo devolve JSON (`reply` | `clarify` | `action`). O código valida; ação
 | Assistente | Ações permitidas |
 |---|---|
 | Hermes | `show_today` (= `/hoje`), `show_week` (= `/semana`), `create_task` (= `/tarefa`, título ≤ 120, `due` AAAA-MM-DD opcional), `create_tasks` (até 10 de uma vez, sem pergunta de meta), `set_task_due` (prazo de tarefas pendentes, só por IDs que existem) |
-| Renato | `capture_note` (sem argumentos: o conteúdo é sempre a mensagem do usuário) |
+| Renato (Vault) | `capture_note` (sem argumentos: o conteúdo é sempre a mensagem do usuário) |
+| Renato (Notion) | `save_note`, `append_to_note`, `find_notes`, `move_note`; ver docs/notion-contract.md |
 
 ## Contexto que o Hermes recebe
 

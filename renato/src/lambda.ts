@@ -6,6 +6,10 @@ import { loadAiConfig } from "../../shared/ai/config.js";
 import { createTelegramHandler, type HttpResponse } from "./handler.js";
 import { createRenatoAi, createRenatoConversation, explicitCapture, HELP_TEXT, CAPTURE_COMMAND, type RenatoConversation } from "./conversation.js";
 import { parseTelegramUpdate } from "./telegram.js";
+import { NotionApiError, NotionUnavailable } from "../../shared/notion/errors.js";
+import { createNotionAi, createNotionAssistant, type NotionAssistant, type TurnInput } from "./notion/assistant.js";
+import { createVerbatimCapture } from "./notion/capture.js";
+import { loadRenatoNotion } from "./notion/config.js";
 import { systemClock } from "./clock.js";
 import { GitHubNoteRepository, type HttpClient } from "./github-repository.js";
 import type { NoteRepository } from "./repository.js";
@@ -22,7 +26,16 @@ export interface RenatoWebhookDeps {
    * Presente: só captura pedido explícito (`/anotar`, marcador de categoria ou pedido reconhecido pelo modelo).
    */
   conversation?: RenatoConversation;
+  /**
+   * Modo Notion (notas organizadas em temas). Presente: todo texto vai ao `assistant` (ou, sem IA, à captura
+   * literal); `/anotar <texto>` é sempre captura literal. Ausente: comportamento do Vault acima.
+   */
+  notion?: { assistant?: NotionAssistant; capture: (turn: TurnInput) => Promise<string> };
 }
+
+export const NOTION_HELP_TEXT = `Converse comigo normalmente: mande o que estudou e eu organizo no Notion, ou pergunte o que você já tem. Para guardar um texto exato, envie ${CAPTURE_COMMAND} <texto>.`;
+export const NOTION_FAILURE_TEXT = "Não consegui acessar o Notion (erro de configuração ou permissão). Veja os logs.";
+const ANOTAR_RE = /^\/anotar(?:@[A-Za-z0-9_]+)?(?:\s+([\s\S]*))?$/i;
 
 const response = (statusCode: number, body = ""): APIGatewayProxyStructuredResultV2 => ({
   statusCode,
@@ -88,6 +101,36 @@ export function createRenatoWebhookHandler(deps: RenatoWebhookDeps) {
 
     const chatId = chatIdFrom(payload);
     if (chatId !== undefined && !deps.allowedChatIds.has(chatId)) return response(200);
+
+    if (deps.notion) {
+      const parsed = parseTelegramUpdate(payload);
+      if (parsed.kind === "invalid") return response(400);
+      const { message } = parsed.kind === "message" ? parsed : { message: undefined };
+      const raw = message?.text?.trim() ?? "";
+      if (message === undefined || raw === "") return response(200, "ignored");
+      const turn: TurnInput = { text: message.text!, chatId: message.chat.id, messageId: message.message_id, epochSeconds: message.date };
+      try {
+        const anotar = ANOTAR_RE.exec(raw);
+        let reply: string;
+        if (anotar) {
+          const body = anotar[1]?.trim() ?? "";
+          reply = body === "" ? `Uso: ${CAPTURE_COMMAND} <texto>` : await deps.notion.capture({ ...turn, text: body });
+        } else if (raw.startsWith("/")) {
+          reply = NOTION_HELP_TEXT;
+        } else {
+          reply = await (deps.notion.assistant ?? deps.notion.capture)(turn);
+        }
+        return await replyOnly(deps, message.chat.id, reply);
+      } catch (error) {
+        if (error instanceof NotionApiError) {
+          console.error(`[notion] ${error.message}`);
+          return replyOnly(deps, message.chat.id, NOTION_FAILURE_TEXT);
+        }
+        // Falha transitória ou inesperada: o Telegram reenvia; criar é idempotente pelo ID da mensagem.
+        console.error(`[renato] erro ao processar (${error instanceof NotionUnavailable ? "notion indisponível" : error instanceof Error ? error.name : "erro"})`);
+        return response(500);
+      }
+    }
 
     let capturePayload: unknown = payload;
     if (deps.conversation) {
@@ -224,6 +267,7 @@ function createRepository(config: RuntimeConfig): NoteRepository {
 async function buildProductionHandler() {
   const ssm = new SSMClient({});
   const config = await loadConfig(process.env, ssm);
+  const notionRepos = await loadRenatoNotion(process.env, (name) => readParameter(ssm, name));
   const repository = createRepository(config);
   const telegramHandler = createTelegramHandler({
     clock: systemClock,
@@ -242,8 +286,13 @@ async function buildProductionHandler() {
   const aiConfig = loadAiConfig(process.env);
   const bedrock = aiConfig ? await loadConverse(aiConfig, (name) => readParameter(ssm, name)) : undefined;
   const conversation = aiConfig && bedrock ? createRenatoConversation(createRenatoAi(aiConfig, bedrock)) : undefined;
+  const notion = notionRepos && {
+    capture: createVerbatimCapture(notionRepos),
+    ...(aiConfig && bedrock && { assistant: createNotionAssistant({ ai: createNotionAi(aiConfig, bedrock), ...notionRepos }) }),
+  };
   return createRenatoWebhookHandler({
     ...(conversation && { conversation }),
+    ...(notion && { notion }),
     webhookSecret: config.webhookSecret,
     allowedChatIds: config.allowedChatIds,
     handleUpdate: telegramHandler,

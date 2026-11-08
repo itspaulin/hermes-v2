@@ -120,7 +120,7 @@ describe("loadAiConfig", () => {
   });
   it("liga com defaults, região do Bedrock sobrepondo a da Lambda, e limita valores", () => {
     const c = loadAiConfig({ AI_ENABLED: "TRUE", BEDROCK_MODEL_ID: "m", BEDROCK_API_KEY_PARAM: "/p/key", AWS_REGION: "sa-east-1", BEDROCK_REGION: "us-east-1", AI_MAX_OUTPUT_TOKENS: "999999", AI_MAX_INPUT_CHARS: "abc" });
-    expect(c).toMatchObject({ modelId: "m", region: "us-east-1", apiKeyParam: "/p/key", maxOutputTokens: 1000, maxInputChars: 1000, maxHistoryMessages: 6 });
+    expect(c).toMatchObject({ modelId: "m", region: "us-east-1", apiKeyParam: "/p/key", maxOutputTokens: 4000, maxInputChars: 1000, maxHistoryMessages: 6 });
   });
 });
 

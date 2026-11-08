@@ -1,4 +1,5 @@
 import type { NotionClient } from "../../../shared/notion/client.js";
+import { NotionApiError } from "../../../shared/notion/errors.js";
 import {
   dateProp,
   instantOf,
@@ -125,6 +126,20 @@ export class NotasRepository {
   async find(id: string, temas?: readonly Tema[]): Promise<Nota | null> {
     const hit = (await queryAll(this.client, this.databaseId, byIdProperty(id)))[0];
     return hit ? this.parsed(hit, temas) : null;
+  }
+
+  /** A nota de uma página do Notion (o link que o Renato enviou termina no ID da página). Null se não existe, não é do Renato ou não é uma nota. */
+  async findByPageId(pageId: string, temas?: readonly Tema[]): Promise<Nota | null> {
+    let page: NotionPage;
+    try {
+      page = await this.client.request("GET", `/v1/pages/${pageId}`);
+    } catch (err) {
+      if (err instanceof NotionApiError && (err.status === 404 || err.status === 400)) return null;
+      throw err;
+    }
+    // Só páginas deste banco: o ID vem de um texto enviado pelo usuário.
+    if ((page as { parent?: { database_id?: string } }).parent?.database_id?.replace(/-/g, "") !== this.databaseId.replace(/-/g, "")) return null;
+    return (await this.parseAll([page], temas))[0] ?? null;
   }
 
   /** As notas mais recentemente alteradas (para dar contexto ao modelo). */

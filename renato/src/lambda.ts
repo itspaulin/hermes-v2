@@ -10,6 +10,7 @@ import { parseTelegramUpdate } from "./telegram.js";
 import { NotionApiError, NotionUnavailable } from "../../shared/notion/errors.js";
 import { createNotionAi, createNotionAssistant, type NotionAssistant, type TurnInput } from "./notion/assistant.js";
 import { createVerbatimCapture } from "./notion/capture.js";
+import { createNotionCommands, type NotionCommands } from "./notion/commands.js";
 import { loadRenatoNotion } from "./notion/config.js";
 import { systemClock } from "./clock.js";
 import { GitHubNoteRepository, type HttpClient } from "./github-repository.js";
@@ -31,12 +32,14 @@ export interface RenatoWebhookDeps {
    * Modo Notion (notas organizadas em temas). Presente: todo texto vai ao `assistant` (ou, sem IA, à captura
    * literal); `/anotar <texto>` é sempre captura literal. Ausente: comportamento do Vault acima.
    */
-  notion?: { assistant?: NotionAssistant; capture: (turn: TurnInput) => Promise<string> };
+  notion?: { assistant?: NotionAssistant; capture: (turn: TurnInput) => Promise<string>; commands?: NotionCommands };
 }
 
-export const NOTION_HELP_TEXT = `Converse comigo normalmente: mande o que estudou e eu organizo no Notion, ou pergunte o que você já tem. Para guardar um texto exato, envie ${CAPTURE_COMMAND} <texto>.`;
+export const NOTION_HELP_TEXT = `Converse comigo normalmente: mande o que estudou e eu organizo no Notion, ou pergunte o que você já tem. Comandos: ${CAPTURE_COMMAND} <texto> guarda o texto exato; /tema <nome> cria um tema (ou move a nota, se você responder à mensagem dela); /notas lista suas notas.`;
 export const NOTION_FAILURE_TEXT = "Não consegui acessar o Notion (erro de configuração ou permissão). Veja os logs.";
 const ANOTAR_RE = /^\/anotar(?:@[A-Za-z0-9_]+)?(?:\s+([\s\S]*))?$/i;
+const TEMA_RE = /^\/tema(?:@[A-Za-z0-9_]+)?(?:\s+([\s\S]*))?$/i;
+const NOTAS_RE = /^\/notas(?:@[A-Za-z0-9_]+)?(?:\s+([\s\S]*))?$/i;
 
 const response = (statusCode: number, body = ""): APIGatewayProxyStructuredResultV2 => ({
   statusCode,
@@ -116,6 +119,10 @@ export function createRenatoWebhookHandler(deps: RenatoWebhookDeps) {
         if (anotar) {
           const body = anotar[1]?.trim() ?? "";
           reply = body === "" ? `Uso: ${CAPTURE_COMMAND} <texto>` : await deps.notion.capture({ ...turn, text: body });
+        } else if (deps.notion.commands && TEMA_RE.test(raw)) {
+          reply = await deps.notion.commands.tema(turn, TEMA_RE.exec(raw)![1]?.trim() ?? "", message.reply_to_message?.text);
+        } else if (deps.notion.commands && NOTAS_RE.test(raw)) {
+          reply = await deps.notion.commands.notas(NOTAS_RE.exec(raw)![1]?.trim() ?? "");
         } else if (raw.startsWith("/")) {
           reply = NOTION_HELP_TEXT;
         } else {
@@ -303,6 +310,7 @@ async function buildProductionHandler() {
   const history = notionRepos && aiConfig && bedrock ? await loadHistory(ssm, aiConfig.maxHistoryMessages) : undefined;
   const notion = notionRepos && {
     capture: createVerbatimCapture(notionRepos),
+    commands: createNotionCommands(notionRepos),
     ...(aiConfig && bedrock && { assistant: createNotionAssistant({ ai: createNotionAi(aiConfig, bedrock), ...notionRepos, ...(history && { history }) }) }),
   };
   return createRenatoWebhookHandler({

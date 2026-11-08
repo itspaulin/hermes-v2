@@ -10,6 +10,8 @@ export interface TelegramMessage {
   chat: TelegramChat;
   /** Ausente em mensagens de mídia, stickers etc. */
   text?: string;
+  /** Mensagem à qual esta responde (só o texto interessa: o link da nota que o Renato enviou). */
+  reply_to_message?: { text?: string };
 }
 
 export interface TelegramUpdate {
@@ -55,5 +57,8 @@ export function parseTelegramUpdate(payload: unknown): ParsedUpdate {
     chat: { id: chat.id as number },
   };
   if (typeof raw.text === "string") message.text = raw.text;
+  if (isRecord(raw.reply_to_message) && typeof raw.reply_to_message.text === "string") {
+    message.reply_to_message = { text: raw.reply_to_message.text };
+  }
   return { kind: "message", updateId, message };
 }

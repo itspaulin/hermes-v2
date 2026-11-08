@@ -100,3 +100,35 @@ describe("Renato no modo Notion", () => {
     expect((await handler(event("oi"))).statusCode).toBe(500);
   });
 });
+
+describe("/tema e /notas no webhook", () => {
+  it("chamam os comandos (com @bot e com o texto da mensagem respondida) sem passar pelo modelo", async () => {
+    const tema = vi.fn(async () => "tema ok");
+    const notas = vi.fn(async () => "notas ok");
+    const assistant = turnFn(async () => "assistente");
+    const sendMessage = vi.fn<Send>(async () => undefined);
+    const handler = createRenatoWebhookHandler({
+      webhookSecret: "s",
+      allowedChatIds: new Set([777]),
+      handleUpdate: vi.fn(),
+      sendMessage,
+      notion: { capture: turnFn(async () => "c"), assistant, commands: { tema, notas } },
+    });
+    const withReply = (text: string): APIGatewayProxyEventV2 => {
+      const e = event(text);
+      const body = JSON.parse(e.body!);
+      body.message.reply_to_message = { text: "Anotei: X\nhttps://www.notion.so/X-41263ec9e8d281b2b5fde9169681b892" };
+      return { ...e, body: JSON.stringify(body) };
+    };
+
+    await handler(withReply("/tema System Design"));
+    expect(tema).toHaveBeenCalledWith(expect.objectContaining({ chatId: 777 }), "System Design", expect.stringContaining("notion.so"));
+    await handler(event("/Notas@renato_bot cap"));
+    expect(notas).toHaveBeenCalledWith("cap");
+    await handler(event("/notas"));
+    expect(notas).toHaveBeenLastCalledWith("");
+    expect(sendMessage).toHaveBeenCalledWith(777, "tema ok");
+    expect(sendMessage).toHaveBeenCalledWith(777, "notas ok");
+    expect(assistant).not.toHaveBeenCalled();
+  });
+});

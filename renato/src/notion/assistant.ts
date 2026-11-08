@@ -6,6 +6,7 @@ import { localDate, localIso } from "../clock.js";
 import { appendToNoteInput, findNotesInput, moveNoteInput, saveNoteInput, type RenatoNotionActions, type TemaChoice } from "./actions.js";
 import { complementBlocks, noteBlocks } from "./blocks.js";
 import type { Nota, NotasRepository } from "./notas.js";
+import { descendants, listNotas } from "./format.js";
 import { INBOX_NAME, findIn, temaPath, type Tema, type TemaRepository } from "./temas.js";
 
 export const AI_UNAVAILABLE_TEXT = "Não consegui conversar agora e, por segurança, não anotei nada. Tente de novo em instantes.";
@@ -171,21 +172,11 @@ export function createNotionAssistant({ ai, temas: temaRepo, notas, history: sto
         if (d.input.tema !== undefined) {
           const root = findIn(temas, d.input.tema);
           if (!root) return `Não achei o tema "${d.input.tema}".`;
-          const ids = new Set([root.id]);
-          for (let grew = true; grew; ) {
-            grew = false;
-            for (const t of temas) if (t.parentId !== undefined && ids.has(t.parentId) && !ids.has(t.id)) (ids.add(t.id), (grew = true));
-          }
-          temaPageIds = temas.filter((t) => ids.has(t.id)).map((t) => t.pageId);
+          temaPageIds = descendants(temas, root).map((t) => t.pageId);
         }
         const found = await notas.search({ ...(d.input.texto !== undefined && { text: d.input.texto }), ...(temaPageIds && { temaPageIds }), limit: MAX_LISTED + 1, temas });
         if (found.length === 0) return "Não achei nenhuma nota com isso.";
-        const byId = new Map(temas.map((t) => [t.id, t]));
-        const shown = found.slice(0, MAX_LISTED).map((n, i) => {
-          const tema = n.temaId !== undefined ? byId.get(n.temaId) : undefined;
-          return `${i + 1}. ${n.title} (${tema ? temaPath(temas, tema) : "sem tema"})${n.summary ? `\n   ${n.summary.slice(0, 100)}` : ""}${link(n).replace("\n", "\n   ")}`;
-        });
-        return [`Achei ${found.length > MAX_LISTED ? `mais de ${MAX_LISTED}` : found.length}:`, ...shown].join("\n");
+        return listNotas(temas, found, MAX_LISTED);
       }
       case "move_note": {
         const nota = await notas.find(d.input.id, temas);

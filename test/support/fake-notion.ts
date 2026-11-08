@@ -1,4 +1,5 @@
 import type { NotionClient } from "../../shared/notion/client.js";
+import { NotionApiError } from "../../shared/notion/errors.js";
 
 /**
  * Notion falso em memória: só o que o Hermes usa. POST /v1/databases/:id/query (filtros select
@@ -44,6 +45,12 @@ export class FakeNotion implements NotionClient {
       page.url = `https://www.notion.so/${page.id}`;
       this.pages.push(page);
       return out(page);
+    }
+    const getPage = /^\/v1\/pages\/([^/]+)$/.exec(path);
+    if (method === "GET" && getPage) {
+      const page = this.pages.find((p) => p.id === getPage[1]);
+      if (!page) throw Object.assign(new NotionApiError(404, "object_not_found", "x"));
+      return { ...out(page), parent: { database_id: page.database } };
     }
     const blocks = /^\/v1\/blocks\/([^/]+)\/children$/.exec(path);
     if (method === "PATCH" && blocks) {

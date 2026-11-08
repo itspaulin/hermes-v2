@@ -1,7 +1,13 @@
+/** Imagem anexada a uma mensagem do usuário. Formatos aceitos pelo Converse: png, jpeg, gif, webp. */
+export interface ConverseImage {
+  format: "png" | "jpeg" | "gif" | "webp";
+  bytes: Uint8Array;
+}
+
 export interface ConverseRequest {
   modelId: string;
   system: string;
-  messages: { role: "user" | "assistant"; text: string }[];
+  messages: { role: "user" | "assistant"; text: string; images?: ConverseImage[] }[];
   maxTokens: number;
   temperature: number;
 }
@@ -47,7 +53,13 @@ export function createBedrockConverse(options: { apiKey: string; region: string;
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${options.apiKey}` },
       body: JSON.stringify({
         system: [{ text: req.system }],
-        messages: req.messages.map((m) => ({ role: m.role, content: [{ text: m.text }] })),
+        messages: req.messages.map((m) => ({
+          role: m.role,
+          content: [
+            ...(m.images ?? []).map((img) => ({ image: { format: img.format, source: { bytes: Buffer.from(img.bytes).toString("base64") } } })),
+            { text: m.text },
+          ],
+        })),
         inferenceConfig: { maxTokens: req.maxTokens, temperature: req.temperature },
       }),
       signal,

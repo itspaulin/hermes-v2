@@ -52,3 +52,12 @@ O Renato grava as notas de estudo em dois bancos do Notion (código em `renato/s
 - Ações do modelo: `save_note`, `append_to_note`, `find_notes`, `move_note`. Ação fora da lista ou com entrada inválida não executa nada. `/anotar <texto>` guarda o texto exato na Caixa de entrada, sem modelo.
 - Limites: o API Gateway corta em 30 s, por isso o modelo tem 20 s (`RenatoAiTimeoutMs`) e 2000 tokens de saída (`RenatoAiMaxOutputTokens`); mensagens até 6000 caracteres (`RenatoAiMaxInputChars`).
 - `npm run smoke:notas` testa o ciclo real nos dois bancos e arquiva o que criar (`KEEP=1` deixa as páginas abertas para ver o Mermaid).
+
+### Memória, comandos e imagens do Renato
+
+- **Memória de conversa**: as últimas 6 mensagens (de até 600 caracteres cada) dos últimos 120 minutos ficam no Neon, tabela `renato_chat_history` (a do Hermes é outra; nunca compartilham conversa). Apagadas depois de 24 h. Opcional e à prova de falha (sem o parâmetro SSM `NeonDatabaseUrlParam`, ou com o Neon fora, o Renato conversa sem memória). Serve para esclarecimentos do tipo "1 ou 2?".
+- **`/tema <nome>`** cria o tema (`/tema Pai > Filho > Neto` cria cada nível dentro do anterior; a Caixa de entrada nunca é pai). **Respondendo à mensagem de uma nota** (a que tem o link), move a nota para o tema: o ID da página sai do link, e só páginas do banco Notas valem. `/tema` sem argumento mostra a árvore.
+- **`/notas`** lista as 10 mais recentes; `/notas <tema>` lista as do tema e dos subtemas; `/notas <texto>` busca no título e no resumo. Sem modelo.
+- **Imagens**: foto ou arquivo de imagem (PNG, JPEG, GIF, WEBP, até 3,5 MB; formato conferido pelos bytes) é baixada do Telegram, lida pelo modelo (visão) e subida ao Notion pela API de upload de arquivos; entra na página como bloco de imagem logo depois do resumo, com `Origem` = `imagem`. A transcrição da imagem vem do modelo e a página avisa que pode ter erros; a legenda vira "Legenda: …" na transcrição e também orienta tema e complemento ("adiciona essa imagem na nota X" acrescenta um complemento com a imagem). **`/guardar` na legenda** guarda a imagem na Caixa de entrada sem modelo (título = 1ª linha da legenda, ou "Imagem DD/MM/AAAA"); sem IA, toda imagem é guardada assim. Se o Notion recusar o arquivo, a nota sai sem a imagem e o bot avisa; o link de download do Telegram (que carrega o token do bot) nunca vai para a página.
+- Mande como **arquivo** (não como foto) para não perder nitidez: o Telegram comprime fotos. Vários arquivos de uma vez viram uma nota cada (álbum não é agrupado).
+- `/desfazer` ainda não existe.

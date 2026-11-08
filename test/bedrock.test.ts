@@ -55,3 +55,16 @@ describe("loadConverse", () => {
     expect(logs.length).toBe(2);
   });
 });
+
+describe("imagens no Converse", () => {
+  it("manda a imagem em base64 antes do texto da mensagem", async () => {
+    let body: any;
+    const fetch = vi.fn(async (_u: string, init: RequestInit) => {
+      body = JSON.parse(init.body as string);
+      return new Response(JSON.stringify({ output: { message: { content: [{ text: "ok" }] } } }), { status: 200 });
+    });
+    const converse = createBedrockConverse({ apiKey: "k", region: "us-east-1", fetch: fetch as never });
+    await converse({ modelId: "m", system: "s", maxTokens: 10, temperature: 0, messages: [{ role: "user", text: "descreva", images: [{ format: "png", bytes: new Uint8Array([1, 2, 3]) }] }] }, new AbortController().signal);
+    expect(body.messages[0].content).toEqual([{ image: { format: "png", source: { bytes: "AQID" } } }, { text: "descreva" }]);
+  });
+});

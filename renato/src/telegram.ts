@@ -10,6 +10,12 @@ export interface TelegramMessage {
   chat: TelegramChat;
   /** Ausente em mensagens de mídia, stickers etc. */
   text?: string;
+  /** Legenda de uma foto ou arquivo. */
+  caption?: string;
+  /** Tamanhos de uma foto enviada como foto (o Telegram comprime). */
+  photo?: { file_id: string; file_size?: number; width?: number; height?: number }[];
+  /** Arquivo enviado como arquivo (sem compressão). */
+  document?: { file_id: string; mime_type?: string; file_name?: string; file_size?: number };
   /** Mensagem à qual esta responde (só o texto interessa: o link da nota que o Renato enviou). */
   reply_to_message?: { text?: string };
 }
@@ -57,8 +63,41 @@ export function parseTelegramUpdate(payload: unknown): ParsedUpdate {
     chat: { id: chat.id as number },
   };
   if (typeof raw.text === "string") message.text = raw.text;
+  if (typeof raw.caption === "string") message.caption = raw.caption;
+  if (Array.isArray(raw.photo)) {
+    const sizes = raw.photo.filter((p): p is Record<string, unknown> => isRecord(p) && typeof p.file_id === "string");
+    if (sizes.length > 0) {
+      message.photo = sizes.map((p) => ({
+        file_id: p.file_id as string,
+        ...(isInt(p.file_size) && { file_size: p.file_size }),
+        ...(isInt(p.width) && { width: p.width }),
+        ...(isInt(p.height) && { height: p.height }),
+      }));
+    }
+  }
+  if (isRecord(raw.document) && typeof raw.document.file_id === "string") {
+    const d = raw.document;
+    message.document = {
+      file_id: d.file_id as string,
+      ...(typeof d.mime_type === "string" && { mime_type: d.mime_type }),
+      ...(typeof d.file_name === "string" && { file_name: d.file_name }),
+      ...(isInt(d.file_size) && { file_size: d.file_size }),
+    };
+  }
   if (isRecord(raw.reply_to_message) && typeof raw.reply_to_message.text === "string") {
     message.reply_to_message = { text: raw.reply_to_message.text };
   }
   return { kind: "message", updateId, message };
+}
+
+/** O arquivo de imagem de uma mensagem: a maior foto, ou um documento com mime de imagem. Null se não há imagem. */
+export function pickImage(message: TelegramMessage): { fileId: string; fileSize?: number } | null {
+  if (message.photo && message.photo.length > 0) {
+    const best = [...message.photo].sort((a, b) => (b.file_size ?? (b.width ?? 0) * (b.height ?? 0)) - (a.file_size ?? (a.width ?? 0) * (a.height ?? 0)))[0]!;
+    return { fileId: best.file_id, ...(best.file_size !== undefined && { fileSize: best.file_size }) };
+  }
+  if (message.document && message.document.mime_type?.startsWith("image/")) {
+    return { fileId: message.document.file_id, ...(message.document.file_size !== undefined && { fileSize: message.document.file_size }) };
+  }
+  return null;
 }

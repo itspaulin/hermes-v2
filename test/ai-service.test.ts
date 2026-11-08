@@ -149,3 +149,14 @@ describe("parseDecision: nome da ação no lugar de 'action'", () => {
     expect(parseDecision('{"type":"go","y":1}', schemas)).toBeNull(); // input inválido continua recusando
   });
 });
+
+describe("imagens na mensagem atual", () => {
+  it("vão só na mensagem atual do usuário e o histórico segue sendo texto", async () => {
+    const converse = vi.fn(async () => ({ text: '{"type":"reply","message":"ok"}' }));
+    const ai = createAiService<Record<string, never>>({ assistant: "renato", systemPrompt: "s", schemas: {}, config, converse });
+    const image = { format: "png" as const, bytes: new Uint8Array([1]) };
+    await ai.decide({ message: "olha", history: [{ role: "user", text: "antes" }, { role: "assistant", text: "resp" }], images: [image] });
+    const req = (converse.mock.calls[0] as unknown as [{ messages: { role: string; text: string; images?: unknown[] }[] }])[0];
+    expect(req.messages.map((m) => m.images?.length ?? 0)).toEqual([0, 0, 1]);
+  });
+});

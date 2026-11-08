@@ -33,14 +33,23 @@ export const toggle = (title: string, children: Block[]): Block => ({
   type: "toggle",
   toggle: { rich_text: richText(title), children },
 });
+/** Imagem já enviada ao Notion (ID do upload). */
+export const imageBlock = (uploadId: string): Block => ({ type: "image", image: { type: "file_upload", file_upload: { id: uploadId } } });
 export const mermaid = (code: string): Block => ({ type: "code", code: { language: "mermaid", rich_text: richText(code) } });
 
+export interface PageOptions {
+  /** Imagem da nota (upload no Notion). Entra logo depois do resumo. */
+  imageUploadId?: string;
+  /** A transcrição veio do modelo lendo a imagem (pode ter erros), não de um texto do usuário. */
+  fromImage?: boolean;
+}
+
 /** A transcrição vira um parágrafo por linha, dentro de um toggle fechado. */
-const transcript = (raw: string): Block =>
-  toggle("Transcrição original", raw.split(/\r?\n/).map((l) => paragraph(l === "" ? " " : l)).slice(0, MAX_BLOCKS_PER_REQUEST - 1));
+const transcript = (raw: string, title: string): Block =>
+  toggle(title, raw.split(/\r?\n/).map((l) => paragraph(l === "" ? " " : l)).slice(0, MAX_BLOCKS_PER_REQUEST - 1));
 
 /** Seções, na ordem fixa combinada: tópicos, conceitos, diagrama, mapa mental, lacunas, transcrição. */
-function sections(c: NoteContent): Block[] {
+function sections(c: NoteContent, o: PageOptions = {}): Block[] {
   const out: Block[] = [];
   if (c.topicos.length > 0) {
     out.push(heading(2, "O que entendi"));
@@ -56,16 +65,16 @@ function sections(c: NoteContent): Block[] {
     out.push(heading(2, "Lacunas e perguntas (sugestões do Renato)"));
     for (const l of c.lacunas) out.push(bullet(l));
   }
-  if (c.transcricao) out.push(transcript(c.transcricao));
+  if (c.transcricao) out.push(transcript(c.transcricao, o.fromImage ? "Transcrição da imagem (feita pelo Renato, pode ter erros)" : "Transcrição original"));
   return out;
 }
 
 /** Corpo de uma nota nova. O resumo vai antes das seções. */
-export function noteBlocks(summary: string, c: NoteContent): Block[] {
-  return [...(summary.trim() === "" ? [] : [paragraph(summary)]), ...sections(c)];
+export function noteBlocks(summary: string, c: NoteContent, o: PageOptions = {}): Block[] {
+  return [...(summary.trim() === "" ? [] : [paragraph(summary)]), ...(o.imageUploadId ? [imageBlock(o.imageUploadId)] : []), ...sections(c, o)];
 }
 
 /** Seção acrescentada ao fim de uma nota existente. `dateLabel` ex.: "08/11/2026". Nada do que já existe é tocado. */
-export function complementBlocks(dateLabel: string, c: NoteContent): Block[] {
-  return [heading(2, `Complemento, ${dateLabel}`), ...sections(c)];
+export function complementBlocks(dateLabel: string, c: NoteContent, o: PageOptions = {}): Block[] {
+  return [heading(2, `Complemento, ${dateLabel}`), ...(o.imageUploadId ? [imageBlock(o.imageUploadId)] : []), ...sections(c, o)];
 }

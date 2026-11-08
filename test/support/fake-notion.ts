@@ -19,6 +19,7 @@ export interface FakePage {
 
 export class FakeNotion implements NotionClient {
   pages: FakePage[] = [];
+  uploads: { id: string; filename: string; contentType: string; bytes: Uint8Array }[] = [];
   calls: { method: string; path: string; body?: any }[] = [];
   pageSize = 100;
   /** Falha a próxima chamada que combine com o teste. */
@@ -69,6 +70,15 @@ export class FakeNotion implements NotionClient {
       return out(page);
     }
     throw new Error(`rota não suportada no fake: ${method} ${path}`);
+  }
+
+  async upload(filename: string, contentType: string, bytes: Uint8Array): Promise<string> {
+    this.calls.push({ method: "UPLOAD", path: filename });
+    const err = this.failWith?.("UPLOAD", filename);
+    if (err) throw err;
+    const id = `upload-${++this.n}`;
+    this.uploads.push({ id, filename, contentType, bytes });
+    return id;
   }
 
   /** Adiciona uma linha como se tivesse sido criada à mão no Notion. */

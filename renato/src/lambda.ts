@@ -6,10 +6,11 @@ import { loadAiConfig } from "../../shared/ai/config.js";
 import { createNeonHistory, type ChatHistory } from "../../shared/ai/history.js";
 import { createTelegramHandler, type HttpResponse } from "./handler.js";
 import { createRenatoAi, createRenatoConversation, explicitCapture, HELP_TEXT, CAPTURE_COMMAND, type RenatoConversation } from "./conversation.js";
-import { parseTelegramUpdate } from "./telegram.js";
+import { parseTelegramUpdate, pickImage } from "./telegram.js";
+import { downloadTelegramImage, type Downloaded } from "./telegram-files.js";
 import { NotionApiError, NotionUnavailable } from "../../shared/notion/errors.js";
 import { createNotionAi, createNotionAssistant, type NotionAssistant, type TurnInput } from "./notion/assistant.js";
-import { createVerbatimCapture } from "./notion/capture.js";
+import { createImageCapture, createVerbatimCapture } from "./notion/capture.js";
 import { createNotionCommands, type NotionCommands } from "./notion/commands.js";
 import { loadRenatoNotion } from "./notion/config.js";
 import { systemClock } from "./clock.js";
@@ -32,10 +33,24 @@ export interface RenatoWebhookDeps {
    * Modo Notion (notas organizadas em temas). Presente: todo texto vai ao `assistant` (ou, sem IA, à captura
    * literal); `/anotar <texto>` é sempre captura literal. Ausente: comportamento do Vault acima.
    */
-  notion?: { assistant?: NotionAssistant; capture: (turn: TurnInput) => Promise<string>; commands?: NotionCommands };
+  notion?: {
+    assistant?: NotionAssistant;
+    capture: (turn: TurnInput) => Promise<string>;
+    commands?: NotionCommands;
+    /** Imagens: baixa do Telegram (com checagem de tamanho e formato) e guarda sem modelo (`/guardar`). Sem isso, imagens são avisadas como não suportadas. */
+    downloadImage?: (fileId: string) => Promise<Downloaded>;
+    captureImage?: (turn: TurnInput) => Promise<string>;
+  };
 }
 
 export const NOTION_HELP_TEXT = `Converse comigo normalmente: mande o que estudou e eu organizo no Notion, ou pergunte o que você já tem. Comandos: ${CAPTURE_COMMAND} <texto> guarda o texto exato; /tema <nome> cria um tema (ou move a nota, se você responder à mensagem dela); /notas lista suas notas.`;
+export const IMAGE_ERRORS = {
+  too_big: "Essa imagem é grande demais (o limite é 3,5 MB). Reduza o tamanho e envie de novo.",
+  not_image: "Não reconheci esse arquivo como imagem. Aceito PNG, JPEG, GIF e WEBP.",
+  unavailable: "Não consegui baixar essa imagem do Telegram. Tente enviar de novo.",
+} as const;
+export const IMAGE_UNSUPPORTED_TEXT = "Imagens não estão disponíveis agora. Envie o texto.";
+const GUARDAR_RE = /^\/guardar(?:@[A-Za-z0-9_]+)?(?:\s+([\s\S]*))?$/i;
 export const NOTION_FAILURE_TEXT = "Não consegui acessar o Notion (erro de configuração ou permissão). Veja os logs.";
 const ANOTAR_RE = /^\/anotar(?:@[A-Za-z0-9_]+)?(?:\s+([\s\S]*))?$/i;
 const TEMA_RE = /^\/tema(?:@[A-Za-z0-9_]+)?(?:\s+([\s\S]*))?$/i;
@@ -110,13 +125,30 @@ export function createRenatoWebhookHandler(deps: RenatoWebhookDeps) {
       const parsed = parseTelegramUpdate(payload);
       if (parsed.kind === "invalid") return response(400);
       const { message } = parsed.kind === "message" ? parsed : { message: undefined };
-      const raw = message?.text?.trim() ?? "";
-      if (message === undefined || raw === "") return response(200, "ignored");
-      const turn: TurnInput = { text: message.text!, chatId: message.chat.id, messageId: message.message_id, epochSeconds: message.date };
+      if (message === undefined) return response(200, "ignored");
+      const image = pickImage(message);
+      const raw = (image ? message.caption : message.text)?.trim() ?? "";
+      if (image === null && raw === "") return response(200, "ignored");
+      const turn: TurnInput = { text: (image ? message.caption : message.text) ?? "", chatId: message.chat.id, messageId: message.message_id, epochSeconds: message.date };
       try {
-        const anotar = ANOTAR_RE.exec(raw);
+        const anotar = image ? null : ANOTAR_RE.exec(raw);
         let reply: string;
-        if (anotar) {
+        if (image) {
+          if (!deps.notion.downloadImage || !deps.notion.captureImage) {
+            reply = IMAGE_UNSUPPORTED_TEXT;
+          } else {
+            const dl = await deps.notion.downloadImage(image.fileId);
+            if (!dl.ok) {
+              reply = IMAGE_ERRORS[dl.reason];
+            } else {
+              const withImage: TurnInput = { ...turn, image: { bytes: dl.bytes, format: dl.format, contentType: dl.contentType, filename: dl.filename } };
+              const guardar = GUARDAR_RE.exec(raw);
+              reply = guardar
+                ? await deps.notion.captureImage({ ...withImage, text: guardar[1]?.trim() ?? "" })
+                : await (deps.notion.assistant ?? deps.notion.captureImage)(withImage);
+            }
+          }
+        } else if (anotar) {
           const body = anotar[1]?.trim() ?? "";
           reply = body === "" ? `Uso: ${CAPTURE_COMMAND} <texto>` : await deps.notion.capture({ ...turn, text: body });
         } else if (deps.notion.commands && TEMA_RE.test(raw)) {
@@ -311,7 +343,9 @@ async function buildProductionHandler() {
   const notion = notionRepos && {
     capture: createVerbatimCapture(notionRepos),
     commands: createNotionCommands(notionRepos),
-    ...(aiConfig && bedrock && { assistant: createNotionAssistant({ ai: createNotionAi(aiConfig, bedrock), ...notionRepos, ...(history && { history }) }) }),
+    downloadImage: (fileId: string) => downloadTelegramImage(config.botToken, fileId),
+    captureImage: createImageCapture({ ...notionRepos, upload: notionRepos.client.upload }),
+    ...(aiConfig && bedrock && { assistant: createNotionAssistant({ ai: createNotionAi(aiConfig, bedrock), ...notionRepos, upload: notionRepos.client.upload, ...(history && { history }) }) }),
   };
   return createRenatoWebhookHandler({
     ...(conversation && { conversation }),

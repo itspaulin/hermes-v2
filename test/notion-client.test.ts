@@ -43,3 +43,34 @@ describe("createNotionClient", () => {
     expect(err.message).not.toContain("segredo");
   });
 });
+
+describe("upload de arquivo", () => {
+  it("cria o upload, envia os bytes em multipart e devolve o ID", async () => {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const fetch = vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      return url.endsWith("/v1/file_uploads") ? json(200, { id: "up-1", status: "pending" }) : json(200, { id: "up-1", status: "uploaded" });
+    });
+    const id = await createNotionClient({ token: "segredo", fetch: fetch as never }).upload("a.png", "image/png", new Uint8Array([1, 2, 3]));
+    expect(id).toBe("up-1");
+    expect(calls[0]!.url).toBe("https://api.notion.com/v1/file_uploads");
+    expect(JSON.parse(calls[0]!.init.body as string)).toEqual({ filename: "a.png", content_type: "image/png" });
+    expect(calls[1]!.url).toBe("https://api.notion.com/v1/file_uploads/up-1/send");
+    expect(calls[1]!.init.body).toBeInstanceOf(FormData);
+    expect((calls[1]!.init.headers as Record<string, string>)["Content-Type"]).toBeUndefined(); // o fetch define o boundary
+    expect(((calls[1]!.init.body as FormData).get("file") as File).size).toBe(3);
+  });
+
+  it("erro no envio: 4xx vira NotionApiError, 5xx/rede NotionUnavailable, sem o token", async () => {
+    const make = (status: number) => createNotionClient({
+      token: "segredo",
+      fetch: (async (url: string) => (url.endsWith("/v1/file_uploads") ? json(200, { id: "u" }) : json(status, { code: "validation_error", message: "arquivo grande" }))) as never,
+    });
+    const api = await make(400).upload("a.png", "image/png", new Uint8Array(1)).catch((e) => e);
+    expect(api).toBeInstanceOf(NotionApiError);
+    expect(api.message).not.toContain("segredo");
+    await expect(make(503).upload("a.png", "image/png", new Uint8Array(1))).rejects.toBeInstanceOf(NotionUnavailable);
+    const net = createNotionClient({ token: "t", fetch: (async (url: string) => { if (url.endsWith("/v1/file_uploads")) return json(200, { id: "u" }); throw new TypeError("rede"); }) as never });
+    await expect(net.upload("a.png", "image/png", new Uint8Array(1))).rejects.toBeInstanceOf(NotionUnavailable);
+  });
+});

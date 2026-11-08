@@ -53,8 +53,21 @@ try {
   ok(n.created && n.nota.temaId === filho.tema.id && n.nota.url !== undefined, `cria nota no subtema (${n.nota.url})`);
   ok(!(await notas.create({ id: `${run}-1`, title: "x", summary: "x", tipo: "ideia", origem: "texto", temaPageId: filho.tema.pageId, createdAt: now, blocks: [] })).created, "mesmo ID não duplica");
 
-  await notas.append(n.nota.pageId, complementBlocks("hoje", { topicos: [{ titulo: "Novo tópico", pontos: ["ponto novo"] }], conceitos: [], lacunas: [] }));
-  ok(true, "complemento acrescentado");
+  const blockIds = await notas.append(n.nota.pageId, complementBlocks("hoje", { topicos: [{ titulo: "Novo tópico", pontos: ["ponto novo"] }], conceitos: [], lacunas: [] }));
+  ok(blockIds.length >= 2, `complemento acrescentado (${blockIds.length} blocos com ID, para desfazer)`);
+  await notas.deleteBlocks(blockIds);
+  const left = await client.request("GET", `/v1/blocks/${n.nota.pageId}/children?page_size=100`);
+  ok(!(left.results as { id: string }[]).some((b) => blockIds.includes(b.id)), "desfazer o complemento remove só os blocos acrescentados");
+
+  await temas.setParent(filho.tema.pageId, null);
+  ok((await temas.list()).find((t) => t.id === filho.tema.id)?.parentId === undefined, "tema sobe para o primeiro nível (Tema pai vazio)");
+  await temas.setParent(filho.tema.pageId, pai.tema.pageId);
+  ok((await temas.list()).find((t) => t.id === filho.tema.id)?.parentId === pai.tema.id, "tema volta a ter o pai");
+
+  await notas.archive(n.nota.pageId);
+  ok((await notas.find(`${run}-1`)) === null, "arquivar tira a nota das consultas");
+  await notas.unarchive(n.nota.pageId);
+  ok((await notas.find(`${run}-1`)) !== null, "restaurar traz a nota de volta");
   ok((await notas.search({ text: run })).some((x) => x.id === `${run}-1`), "search por texto");
   ok((await notas.search({ temaPageIds: [filho.tema.pageId] })).length === 1, "search por tema");
   ok((await notas.recent(5)).some((x) => x.id === `${run}-1`), "recent");

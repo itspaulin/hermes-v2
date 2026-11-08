@@ -1,5 +1,6 @@
 import { createNotionClient } from "../shared/notion/client.js";
 import { complementBlocks, noteBlocks } from "../renato/src/notion/blocks.js";
+import { normalizeDiagram, normalizeMindMap } from "../renato/src/notion/diagram.js";
 import { NotasRepository } from "../renato/src/notion/notas.js";
 import { TemaRepository } from "../renato/src/notion/temas.js";
 import { createSsmReader } from "../src/ssm.js";
@@ -38,8 +39,12 @@ try {
   const blocks = noteBlocks("Resumo de teste.", {
     topicos: [{ titulo: "Tópico", pontos: ["ponto 1", "ponto 2"] }],
     conceitos: [{ termo: "Termo", definicao: "definição" }],
-    diagrama: "flowchart LR\n  Cliente --> API\n  API --> Banco[(Banco)]",
-    mapaMental: "mindmap\n  root((Teste))\n    Ramo A\n      Folha 1\n    Ramo B",
+    diagrama: normalizeDiagram({
+      nos: [{ id: "c", rotulo: "Cliente" }, { id: "a", rotulo: "API", forma: "redondo" }, { id: "b", rotulo: "Banco", forma: "banco" }],
+      ligacoes: [{ de: "c", para: "a", rotulo: "HTTPS" }, { de: "a", para: "b" }],
+      grupos: [{ titulo: "Backend", nos: ["a", "b"] }],
+    }),
+    mapaMental: normalizeMindMap({ raiz: "Teste", ramos: [{ rotulo: "Ramo A", filhos: [{ rotulo: "Folha 1" }] }, { rotulo: "Ramo B" }] }),
     lacunas: ["Pergunta em aberto?"],
     transcricao: "linha 1\nlinha 2",
   });

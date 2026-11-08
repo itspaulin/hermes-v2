@@ -173,8 +173,8 @@ describe("blocos", () => {
   const content: NoteContent = {
     topicos: [{ titulo: "Consistência", pontos: ["todos veem o mesmo dado"] }],
     conceitos: [{ termo: "Partição", definicao: "falha de rede entre nós" }],
-    diagrama: "flowchart LR\n  A-->B",
-    mapaMental: "mindmap\n  root((CAP))",
+    diagrama: { direcao: "LR", nos: [{ id: "a", rotulo: "A", forma: "caixa" }, { id: "b", rotulo: "B", forma: "banco" }], ligacoes: [{ de: "a", para: "b" }], grupos: [] },
+    mapaMental: { raiz: "CAP", ramos: [{ rotulo: "C", filhos: [] }] },
     lacunas: ["E a latência?"],
     transcricao: "linha 1\n\nlinha 3",
   };

@@ -1,4 +1,5 @@
 import { richText } from "../../../shared/notion/props.js";
+import { diagramToMermaid, mindMapToMermaid, type DiagramSpec, type MindMapSpec } from "./diagram.js";
 
 /** Bloco do Notion (formato da API). Só os tipos que o Renato escreve. */
 export type Block = Record<string, unknown>;
@@ -7,10 +8,10 @@ export type Block = Record<string, unknown>;
 export interface NoteContent {
   topicos: { titulo: string; pontos: string[] }[];
   conceitos: { termo: string; definicao: string }[];
-  /** Código Mermaid de um diagrama de arquitetura/fluxo. */
-  diagrama?: string;
-  /** Código Mermaid (mindmap) ou null para usar só a lista de tópicos. */
-  mapaMental?: string;
+  /** Diagrama de arquitetura/fluxo como nós e ligações; o código gera o Mermaid. */
+  diagrama?: DiagramSpec;
+  /** Mapa mental como árvore; sai como `flowchart` (o `mindmap` do Mermaid não renderiza no Notion). */
+  mapaMental?: MindMapSpec;
   /** Perguntas e pontos em aberto sugeridos pelo modelo. Aparecem separados do conteúdo do usuário. */
   lacunas: string[];
   /** Texto exato do usuário (ou transcrição da imagem). */
@@ -49,8 +50,8 @@ function sections(c: NoteContent): Block[] {
     out.push(heading(2, "Conceitos-chave"));
     for (const k of c.conceitos) out.push(bullet(`${k.termo}: ${k.definicao}`));
   }
-  if (c.diagrama) out.push(heading(2, "Diagrama"), mermaid(c.diagrama));
-  if (c.mapaMental) out.push(heading(2, "Mapa mental"), mermaid(c.mapaMental));
+  if (c.diagrama) out.push(heading(2, "Diagrama"), mermaid(diagramToMermaid(c.diagrama)));
+  if (c.mapaMental) out.push(heading(2, "Mapa mental"), mermaid(mindMapToMermaid(c.mapaMental)));
   if (c.lacunas.length > 0) {
     out.push(heading(2, "Lacunas e perguntas (sugestões do Renato)"));
     for (const l of c.lacunas) out.push(bullet(l));

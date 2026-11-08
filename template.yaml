@@ -17,7 +17,7 @@ Parameters:
 
   VaultRepo:
     Type: String
-    Default: itspaulin/obsidian-vault
+    Default: paulobarbosa-dev/obsidian-vault
     Description: Repositório privado do Vault (owner/repo). Não é segredo.
   VaultBranch:
     Type: String
@@ -32,6 +32,39 @@ Parameters:
     Default: /renato/prod/telegram
     Description: Prefixo dos parâmetros SecureString do bot independente do Renato
 
+  NotionTokenParam:
+    Type: String
+    Default: /hermes/prod/notion/token
+    Description: Nome (não o valor) do parâmetro SecureString com o token da integração do Notion
+  NotionTasksDb:
+    Type: String
+    Default: ""
+    Description: ID (32 caracteres) do banco Tarefas do Notion. Vazio = tarefas e metas continuam no Vault.
+  NotionMetasDb:
+    Type: String
+    Default: ""
+    Description: ID (32 caracteres) do banco Metas do Notion. Preencha junto com NotionTasksDb.
+  NotionTemasDb:
+    Type: String
+    Default: ""
+    Description: ID (32 caracteres) do banco Temas do Notion (Renato). Vazio = o Renato continua gravando no Vault.
+  NotionNotasDb:
+    Type: String
+    Default: ""
+    Description: ID (32 caracteres) do banco Notas do Notion (Renato). Preencha junto com NotionTemasDb.
+  RenatoAiMaxInputChars:
+    Type: String
+    Default: "6000"
+    Description: Tamanho máximo da mensagem para o Renato organizar em nota (maior que o do Hermes)
+  RenatoAiMaxOutputTokens:
+    Type: String
+    Default: "2000"
+    Description: Tokens de saída do Renato (a nota estruturada é longa). O API Gateway corta em 30 s, então não suba muito
+  RenatoAiTimeoutMs:
+    Type: String
+    Default: "20000"
+    Description: Tempo máximo da chamada ao modelo no Renato (deixa folga dentro dos 30 s do API Gateway)
+
   AiEnabled:
     Type: String
     Default: "false"
@@ -39,12 +72,20 @@ Parameters:
     Description: Liga a conversa natural (Hermes e Renato) via Amazon Bedrock. Desligada por padrão.
   BedrockModelId:
     Type: String
-    Default: us.amazon.nova-lite-v1:0
-    Description: Inference profile do Amazon Nova Lite (o modelo não existe em sa-east-1; o profile "us." roteia entre regiões dos EUA)
+    Default: us.anthropic.claude-haiku-4-5-20251001-v1:0
+    Description: Inference profile do Claude Haiku 4.5 (o modelo não existe em sa-east-1; o profile "us." roteia entre regiões dos EUA)
+  BedrockApiKeyParam:
+    Type: String
+    Default: /hermes/prod/bedrock/api-key
+    Description: Nome (não o valor) do parâmetro SecureString com a API key do Bedrock, compartilhada pelo Hermes e pelo Renato
   BedrockRegion:
     Type: String
     Default: us-east-1
     Description: Região do Bedrock Runtime, que pode diferir da região da stack
+  NeonDatabaseUrlParam:
+    Type: String
+    Default: /hermes/prod/neon/database-url
+    Description: Nome (não o valor) do parâmetro SecureString com a connection string do Neon (histórico curto da conversa do Hermes). Sem o parâmetro, o Hermes conversa sem histórico.
   AiMaxHistoryMessages:
     Type: String
     Default: "6"
@@ -90,7 +131,12 @@ Resources:
           VAULT_GITHUB_TOKEN_PARAM: !Ref VaultTokenParam
           AI_ENABLED: !Ref AiEnabled
           BEDROCK_MODEL_ID: !Ref BedrockModelId
+          BEDROCK_API_KEY_PARAM: !Ref BedrockApiKeyParam
           BEDROCK_REGION: !Ref BedrockRegion
+          NEON_DATABASE_URL_PARAM: !Ref NeonDatabaseUrlParam
+          NOTION_TOKEN_PARAM: !Ref NotionTokenParam
+          NOTION_TASKS_DB: !Ref NotionTasksDb
+          NOTION_METAS_DB: !Ref NotionMetasDb
           AI_MAX_HISTORY_MESSAGES: !Ref AiMaxHistoryMessages
           AI_MAX_INPUT_CHARS: !Ref AiMaxInputChars
           AI_MAX_OUTPUT_TOKENS: !Ref AiMaxOutputTokens
@@ -104,14 +150,10 @@ Resources:
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SsmPrefix}/webhook-secret"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SsmPrefix}/allowed-chat-ids"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${VaultTokenParam}"
-            - Effect: Allow
-              Action: bedrock:InvokeModel
-              Resource:
-                - !Sub "arn:${AWS::Partition}:bedrock:${BedrockRegion}:${AWS::AccountId}:inference-profile/${BedrockModelId}"
-                # O profile "us." roteia para estas regiões; o modelo base precisa estar liberado em cada uma.
-                - !Sub "arn:${AWS::Partition}:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0"
-                - !Sub "arn:${AWS::Partition}:bedrock:us-east-2::foundation-model/amazon.nova-lite-v1:0"
-                - !Sub "arn:${AWS::Partition}:bedrock:us-west-2::foundation-model/amazon.nova-lite-v1:0"
+                # API key do Bedrock: a chamada usa a key (bearer), não a role, então a role só lê o parâmetro.
+                - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${BedrockApiKeyParam}"
+                - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NeonDatabaseUrlParam}"
+                - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NotionTokenParam}"
       Events:
         TelegramWebhook:
           Type: HttpApi
@@ -208,28 +250,30 @@ Resources:
           RENATO_VAULT_GITHUB_TOKEN_PARAM: !Ref VaultTokenParam
           AI_ENABLED: !Ref AiEnabled
           BEDROCK_MODEL_ID: !Ref BedrockModelId
+          BEDROCK_API_KEY_PARAM: !Ref BedrockApiKeyParam
           BEDROCK_REGION: !Ref BedrockRegion
           AI_MAX_HISTORY_MESSAGES: !Ref AiMaxHistoryMessages
-          AI_MAX_INPUT_CHARS: !Ref AiMaxInputChars
-          AI_MAX_OUTPUT_TOKENS: !Ref AiMaxOutputTokens
+          AI_MAX_INPUT_CHARS: !Ref RenatoAiMaxInputChars
+          AI_MAX_OUTPUT_TOKENS: !Ref RenatoAiMaxOutputTokens
+          AI_TIMEOUT_MS: !Ref RenatoAiTimeoutMs
+          NOTION_TOKEN_PARAM: !Ref NotionTokenParam
+          NEON_DATABASE_URL_PARAM: !Ref NeonDatabaseUrlParam
+          NOTION_TEMAS_DB: !Ref NotionTemasDb
+          NOTION_NOTAS_DB: !Ref NotionNotasDb
       Policies:
         - Version: "2012-10-17"
           Statement:
             - Effect: Allow
               Action: ssm:GetParameter
               Resource:
+                - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NotionTokenParam}"
+                - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NeonDatabaseUrlParam}"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${RenatoSsmPrefix}/bot-token"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${RenatoSsmPrefix}/webhook-secret"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${RenatoSsmPrefix}/allowed-chat-ids"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${VaultTokenParam}"
-            - Effect: Allow
-              Action: bedrock:InvokeModel
-              Resource:
-                - !Sub "arn:${AWS::Partition}:bedrock:${BedrockRegion}:${AWS::AccountId}:inference-profile/${BedrockModelId}"
-                # O profile "us." roteia para estas regiões; o modelo base precisa estar liberado em cada uma.
-                - !Sub "arn:${AWS::Partition}:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0"
-                - !Sub "arn:${AWS::Partition}:bedrock:us-east-2::foundation-model/amazon.nova-lite-v1:0"
-                - !Sub "arn:${AWS::Partition}:bedrock:us-west-2::foundation-model/amazon.nova-lite-v1:0"
+                # API key do Bedrock: a chamada usa a key (bearer), não a role, então a role só lê o parâmetro.
+                - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${BedrockApiKeyParam}"
       Events:
         RenatoTelegramWebhook:
           Type: HttpApi

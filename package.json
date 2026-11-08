@@ -14,11 +14,14 @@
     "build": "PATH=$PWD/node_modules/.bin:$PATH sam build && node scripts/check-bundle.mjs",
     "smoke:vault": "esbuild scripts/smoke-vault.ts --bundle --platform=node --format=esm --target=es2022 --outfile=.smoke/smoke-vault.mjs --log-level=warning --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node .smoke/smoke-vault.mjs",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "telegram": "esbuild scripts/telegram-admin.ts --bundle --platform=node --format=esm --target=es2022 --outfile=.smoke/telegram-admin.mjs --log-level=warning --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node .smoke/telegram-admin.mjs"
+    "telegram": "esbuild scripts/telegram-admin.ts --bundle --platform=node --format=esm --target=es2022 --outfile=.smoke/telegram-admin.mjs --log-level=warning --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node .smoke/telegram-admin.mjs",
+    "smoke:notion": "esbuild scripts/smoke-notion.ts --bundle --platform=node --format=esm --target=es2022 --outfile=.smoke/smoke-notion.mjs --log-level=warning --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node .smoke/smoke-notion.mjs",
+    "migrate:notion": "esbuild scripts/migrate-vault-to-notion.ts --bundle --platform=node --format=esm --target=es2022 --outfile=.smoke/migrate-vault-to-notion.mjs --log-level=warning --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node .smoke/migrate-vault-to-notion.mjs",
+    "smoke:notas": "esbuild scripts/smoke-notas.ts --bundle --platform=node --format=esm --target=es2022 --outfile=.smoke/smoke-notas.mjs --log-level=warning --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node .smoke/smoke-notas.mjs"
   },
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.1156.0",
     "@aws-sdk/client-ssm": "^3.1140.0",
+    "@neondatabase/serverless": "^1.2.0",
     "luxon": "^3.7.2",
     "yaml": "^2.9.1"
   },

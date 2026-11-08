@@ -5,6 +5,7 @@ import { TelegramApiError, type TelegramClient } from "./client.js";
 import { AnswerValidationError } from "../domain/answer.js";
 import { CheckinNotFound, type CheckinRepository } from "../domain/checkin-repository.js";
 import { ReviewNotFound, type ReviewRepository } from "../domain/review-repository.js";
+import { NotionApiError, NotionUnavailable } from "../../shared/notion/errors.js";
 import { MetaNotFound, MetaValidationError, type MetaRepository } from "../domain/meta-repository.js";
 import { TaskNotFound, TaskValidationError, type TaskRepository } from "../domain/task-repository.js";
 import { VaultApiError, VaultConflict, VaultInvalidNote, VaultUnavailable } from "../vault/errors.js";
@@ -83,7 +84,7 @@ export async function handleWebhook(
 
   let result: Reply;
   try {
-    result = asReply(await routeMessage(message.text, message.date, routeDeps, message.reply_to_message));
+    result = asReply(await routeMessage(message.text, message.date, { ...routeDeps, chatId: message.chat.id }, message.reply_to_message));
   } catch (err) {
     const outcome = describeError(err);
     if (outcome.kind === "retry") return reply(500);
@@ -177,6 +178,15 @@ function describeError(err: unknown): { kind: "reply"; text: string } | { kind: 
     // Token/permissão/repo/branch: reenviar não adianta e prenderia a fila do Telegram.
     console.error(`[vault] ${err.message}`);
     return { kind: "reply", text: "Não consegui acessar o Vault (erro de configuração ou permissão). Veja os logs." };
+  }
+  if (err instanceof NotionApiError) {
+    // Token/permissão/banco/propriedade: reenviar não adianta e prenderia a fila do Telegram.
+    console.error(`[notion] ${err.message}`);
+    return { kind: "reply", text: "Não consegui acessar o Notion (erro de configuração ou permissão). Veja os logs." };
+  }
+  if (err instanceof NotionUnavailable) {
+    console.error(`[notion] ${err.message}`);
+    return { kind: "retry" };
   }
   if (err instanceof VaultUnavailable) {
     console.error(`[vault] ${err.message}`);

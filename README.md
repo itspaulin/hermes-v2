@@ -1,6 +1,6 @@
 # Hermes v2
 
-Bot de metas, tarefas, check-ins e acompanhamento. Telegram é a interface, o Obsidian Vault (via GitHub) é a fonte de verdade, AWS executa.
+Bot de metas, tarefas, check-ins e acompanhamento. Telegram é a interface, AWS executa. Tarefas e metas moram no Notion (docs/notion-contract.md); check-ins, revisões e as notas do Renato, no Obsidian Vault (via GitHub).
 
 Status: no ar na AWS. Telegram (`/start`, `/ping`), tarefas (`/tarefa`, `/feita`, `/cancelar`), listagens (`/hoje`, `/semana`) e metas (`/meta`, `/metas`, `/metafeita`, `/metacancelar`), gravadas no Vault via GitHub. Check-ins agendados (EventBridge Scheduler) e revisão semanal, com `/checkin`, `/metrica` e `/revisao`.
 
@@ -23,7 +23,8 @@ src/
   time/          ÚNICO módulo que sabe "agora", "hoje", "amanhã", semana e tempo de evento
   vault/         VaultStore, InMemoryVaultStore, guarda de caminhos, frontmatter cirúrgico, slug
   ai/            conversa natural do Hermes (prompt + ações permitidas); serviço comum em shared/ai/
-  domain/        tarefas (TaskRepository) sobre VaultStore; não conhece Telegram nem GitHub
+  domain/        interfaces TaskRepository/MetaRepository e a implementação sobre VaultStore; não conhece Telegram nem GitHub
+  notion/        implementação das tarefas e metas sobre a API do Notion (docs/notion-contract.md)
 test/
 shared/ai/       serviço Bedrock compartilhado (Hermes e Renato); ver docs/ai-conversation.md
 template.yaml    SAM: 1 Lambda + HTTP API

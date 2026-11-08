@@ -80,6 +80,8 @@ export async function cmdTarefa(
   args: string,
   eventEpochSeconds: number | undefined,
   deps: FlowDeps,
+  /** false = vários de uma vez: nunca pergunta a meta (cria sem meta), para a resposta continuar sendo um texto só. */
+  askMetaChoice = true,
 ): Promise<RouteResult> {
   const parsed = parseTarefaArgs(args);
   if ("error" in parsed) return parsed.error;
@@ -100,7 +102,7 @@ export async function cmdTarefa(
   if (existing) {
     return createdText(existing, false, { meta: null, explicitNone: false, ...(parsed.due !== undefined && { requestedDue: parsed.due }) });
   }
-  if ((await activeMetas(metas)).length === 0) return createTask(input, { meta: null, explicitNone: false }, deps);
+  if (!askMetaChoice || (await activeMetas(metas)).length === 0) return createTask(input, { meta: null, explicitNone: false }, deps);
 
   return askMeta({ id: plan.id, title: plan.title, ...(parsed.due !== undefined && { due: parsed.due }) }, metas);
 }

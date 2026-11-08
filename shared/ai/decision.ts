@@ -36,6 +36,20 @@ function cleanMessage(v: unknown): string | null {
  * ação fora da allowlist, input inválido) nunca vira ação. `Object.hasOwn` impede que nomes como
  * "constructor" passem pela allowlist.
  */
+export type Rejection = "json_invalid" | "type_unknown" | "message_invalid" | "action_not_allowed" | "input_invalid";
+
+/** Por que o texto do modelo foi recusado. Só um código fixo, nunca o conteúdo (serve para os logs). */
+export function explainRejection<Actions extends Record<string, unknown>>(raw: string, schemas: ActionSchemas<Actions>): Rejection {
+  const obj = extractJson(raw);
+  if (!isRecord(obj)) return "json_invalid";
+  if (obj.type === "reply" || obj.type === "clarify") return "message_invalid";
+  const flattened = typeof obj.type === "string" && Object.hasOwn(schemas, obj.type);
+  if (obj.type !== "action" && !flattened) return "type_unknown";
+  const name = flattened ? obj.type : obj.action;
+  if (typeof name !== "string" || !Object.hasOwn(schemas, name)) return "action_not_allowed";
+  return "input_invalid";
+}
+
 export function parseDecision<Actions extends Record<string, unknown>>(
   raw: string,
   schemas: ActionSchemas<Actions>,
@@ -47,12 +61,16 @@ export function parseDecision<Actions extends Record<string, unknown>>(
   if (obj.type === "reply" || obj.type === "clarify") {
     return message ? { type: obj.type, message } : null;
   }
-  if (obj.type !== "action") return null;
+  // Erro comum de modelos pequenos: o nome da ação no lugar de "action" ({"type":"save_note",...}).
+  // Aceito só se o nome está na allowlist; o input vem de `input` ou dos demais campos soltos.
+  const flattened = typeof obj.type === "string" && Object.hasOwn(schemas, obj.type);
+  if (obj.type !== "action" && !flattened) return null;
 
-  const name = obj.action;
+  const name = flattened ? obj.type : obj.action;
   if (typeof name !== "string" || !Object.hasOwn(schemas, name)) return null;
   const validate = schemas[name as keyof Actions & string] as InputValidator<unknown>;
-  const input = validate(obj.input === undefined ? {} : obj.input);
+  const loose = flattened && obj.input === undefined ? Object.fromEntries(Object.entries(obj).filter(([k]) => k !== "type" && k !== "message")) : undefined;
+  const input = validate(obj.input === undefined ? (loose ?? {}) : obj.input);
   if (input === null) return null;
   return { type: "action", action: name, input, ...(message && { message }) } as DecisionOf<Actions>;
 }

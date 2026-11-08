@@ -5,7 +5,7 @@ import { createAiService } from "../shared/ai/service.js";
 import type { Converse } from "../shared/ai/bedrock.js";
 import type { AiConfig } from "../shared/ai/types.js";
 
-const config: AiConfig = { modelId: "model-x", region: "us-east-1", maxHistoryMessages: 2, maxInputChars: 50, maxOutputTokens: 77, timeoutMs: 1000 };
+const config: AiConfig = { modelId: "model-x", region: "us-east-1", apiKeyParam: "/p/key", maxHistoryMessages: 2, maxInputChars: 50, maxOutputTokens: 77, timeoutMs: 1000 };
 type Acts = { ping: { n: number } };
 const schemas = { ping: (i: unknown) => (typeof (i as { n?: unknown })?.n === "number" ? { n: (i as { n: number }).n } : null) };
 
@@ -115,10 +115,48 @@ describe("loadAiConfig", () => {
     expect(loadAiConfig({})).toBeNull();
     expect(loadAiConfig({ AI_ENABLED: "false", BEDROCK_MODEL_ID: "m", AWS_REGION: "r" })).toBeNull();
     expect(loadAiConfig({ AI_ENABLED: "true", AWS_REGION: "r" })).toBeNull();
-    expect(loadAiConfig({ AI_ENABLED: "true", BEDROCK_MODEL_ID: "m" })).toBeNull();
+    expect(loadAiConfig({ AI_ENABLED: "true", BEDROCK_MODEL_ID: "m", AWS_REGION: "r" })).toBeNull(); // sem BEDROCK_API_KEY_PARAM
+    expect(loadAiConfig({ AI_ENABLED: "true", BEDROCK_MODEL_ID: "m", BEDROCK_API_KEY_PARAM: "/p/key" })).toBeNull();
   });
   it("liga com defaults, região do Bedrock sobrepondo a da Lambda, e limita valores", () => {
-    const c = loadAiConfig({ AI_ENABLED: "TRUE", BEDROCK_MODEL_ID: "m", AWS_REGION: "sa-east-1", BEDROCK_REGION: "us-east-1", AI_MAX_OUTPUT_TOKENS: "999999", AI_MAX_INPUT_CHARS: "abc" });
-    expect(c).toMatchObject({ modelId: "m", region: "us-east-1", maxOutputTokens: 1000, maxInputChars: 1000, maxHistoryMessages: 6 });
+    const c = loadAiConfig({ AI_ENABLED: "TRUE", BEDROCK_MODEL_ID: "m", BEDROCK_API_KEY_PARAM: "/p/key", AWS_REGION: "sa-east-1", BEDROCK_REGION: "us-east-1", AI_MAX_OUTPUT_TOKENS: "999999", AI_MAX_INPUT_CHARS: "abc" });
+    expect(c).toMatchObject({ modelId: "m", region: "us-east-1", apiKeyParam: "/p/key", maxOutputTokens: 4000, maxInputChars: 1000, maxHistoryMessages: 6 });
+  });
+});
+
+describe("explainRejection: motivo da recusa, sem conteúdo", () => {
+  const schemas = { go: (i: unknown) => (typeof i === "object" && i !== null ? ({} as Record<string, never>) : null) };
+  it.each([
+    ["bla bla", "json_invalid"],
+    ['{"type":"outro"}', "type_unknown"],
+    ['{"type":"reply"}', "message_invalid"],
+    ['{"type":"action","action":"apagar_tudo","input":{}}', "action_not_allowed"],
+    ['{"type":"action","action":"go","input":5}', "input_invalid"],
+  ])("%s -> %s", async (raw, expected) => {
+    const { explainRejection } = await import("../shared/ai/decision.js");
+    expect(explainRejection(raw, schemas)).toBe(expected);
+  });
+});
+
+describe("parseDecision: nome da ação no lugar de 'action'", () => {
+  const schemas = { go: (i: unknown) => (typeof i === "object" && i !== null && typeof (i as { x?: unknown }).x === "string" ? ({ x: (i as { x: string }).x }) : null) };
+  it("aceita {type:<ação>, input} e {type:<ação>, ...campos soltos}, só se a ação está na allowlist", async () => {
+    const { parseDecision } = await import("../shared/ai/decision.js");
+    expect(parseDecision('{"type":"go","input":{"x":"a"}}', schemas)).toMatchObject({ type: "action", action: "go", input: { x: "a" } });
+    expect(parseDecision('{"type":"go","x":"b","message":"oi"}', schemas)).toMatchObject({ type: "action", action: "go", input: { x: "b" }, message: "oi" });
+    expect(parseDecision('{"type":"apagar","x":"b"}', schemas)).toBeNull();
+    expect(parseDecision('{"type":"constructor","x":"b"}', schemas)).toBeNull();
+    expect(parseDecision('{"type":"go","y":1}', schemas)).toBeNull(); // input inválido continua recusando
+  });
+});
+
+describe("imagens na mensagem atual", () => {
+  it("vão só na mensagem atual do usuário e o histórico segue sendo texto", async () => {
+    const converse = vi.fn(async () => ({ text: '{"type":"reply","message":"ok"}' }));
+    const ai = createAiService<Record<string, never>>({ assistant: "renato", systemPrompt: "s", schemas: {}, config, converse });
+    const image = { format: "png" as const, bytes: new Uint8Array([1]) };
+    await ai.decide({ message: "olha", history: [{ role: "user", text: "antes" }, { role: "assistant", text: "resp" }], images: [image] });
+    const req = (converse.mock.calls[0] as unknown as [{ messages: { role: string; text: string; images?: unknown[] }[] }])[0];
+    expect(req.messages.map((m) => m.images?.length ?? 0)).toEqual([0, 0, 1]);
   });
 });

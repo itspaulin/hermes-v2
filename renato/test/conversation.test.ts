@@ -7,7 +7,7 @@ import { AI_UNAVAILABLE_TEXT, createRenatoAi, createRenatoConversation, explicit
 import type { Converse } from "../../shared/ai/bedrock.js";
 import type { AiConfig } from "../../shared/ai/types.js";
 
-const config: AiConfig = { modelId: "m", region: "us-east-1", maxHistoryMessages: 4, maxInputChars: 500, maxOutputTokens: 100, timeoutMs: 1000 };
+const config: AiConfig = { modelId: "m", region: "us-east-1", apiKeyParam: "/p/key", maxHistoryMessages: 4, maxInputChars: 500, maxOutputTokens: 100, timeoutMs: 1000 };
 
 function event(text: string): APIGatewayProxyEventV2 {
   return {

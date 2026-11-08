@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeRepos } from "./support/repos.js";
-import { TaskRepository } from "../src/domain/task-repository.js";
+import { VaultTaskRepository } from "../src/domain/task-repository.js";
 import { cmdHoje, cmdSemana } from "../src/telegram/list-commands.js";
 import { routeMessage } from "../src/telegram/router.js";
 import { fakeClock, parseLocalDate } from "../src/time/index.js";
@@ -14,7 +14,7 @@ const NOW = "2026-09-25T18:10:00Z";
 async function setup(tasks: { title: string; due?: string }[] = []) {
   const clock = fakeClock(NOW);
   const mem = new InMemoryVaultStore();
-  const repo = new TaskRepository(guardVaultStore(mem), clock);
+  const repo = new VaultTaskRepository(guardVaultStore(mem), clock);
   for (const t of tasks) {
     await repo.create({
       title: t.title,

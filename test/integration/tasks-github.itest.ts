@@ -12,7 +12,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { TaskRepository } from "../../src/domain/task-repository.js";
+import { VaultTaskRepository } from "../../src/domain/task-repository.js";
 import { taskPath } from "../../src/domain/task.js";
 import { createSsmReader } from "../../src/ssm.js";
 import { fakeClock } from "../../src/time/index.js";
@@ -73,12 +73,12 @@ function newRepo(clockIso = "2020-01-01T15:10:00Z", wrap?: (s: VaultStore) => Va
   const base = createGitHubVaultStore(cfg);
   const store: VaultStore = wrap ? wrap(base) : base;
   const clock = fakeClock(clockIso);
-  const repo = new TaskRepository(store, clock);
+  const repo = new VaultTaskRepository(store, clock);
   return { repo, clock };
 }
 
 /** Cria uma tarefa de teste com título único (registra para limpeza). */
-async function makeTask(repo: TaskRepository, label: string) {
+async function makeTask(repo: VaultTaskRepository, label: string) {
   const { task, created: wasCreated } = await repo.create({ title: `it ${RUN} ${label}`, eventEpochSeconds: EVENT });
   created.add(task.path);
   expect(wasCreated).toBe(true);

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { TaskNotFound, TaskRepository, TaskValidationError, type CreateTaskInput } from "../src/domain/task-repository.js";
+import { TaskNotFound, VaultTaskRepository, TaskValidationError, type CreateTaskInput } from "../src/domain/task-repository.js";
 import { parseTask, taskPath } from "../src/domain/task.js";
 import { fakeClock } from "../src/time/index.js";
 import { VaultConflict, VaultInvalidNote } from "../src/vault/errors.js";
@@ -86,7 +86,7 @@ describe.each([
 function setup(nowIso = "2026-09-25T18:10:00Z") {
   const mem = makeBackend();
   const clock = fakeClock(nowIso);
-  const repo = new TaskRepository(mem.store, clock);
+  const repo = new VaultTaskRepository(mem.store, clock);
   return { mem, clock, repo };
 }
 
@@ -275,6 +275,38 @@ describe("complete / cancel", () => {
     const { repo } = setup();
     await expect(repo.complete("../../pessoal/segredo")).rejects.toThrow(/fora do contrato/);
     await expect(repo.find("x")).rejects.toThrow(/fora do contrato/);
+  });
+});
+
+describe("setDue", () => {
+  it("define o prazo e atualiza `updated`; corpo e demais campos ficam", async () => {
+    const { repo, mem } = setup();
+    await repo.create({ title: "Estudar system design", eventEpochSeconds: EVENT });
+    const before = (await mem.read(PATH))!.content;
+    const { task, changed } = await repo.setDue(ID, "2026-11-08" as never);
+    expect(changed).toBe(true);
+    expect(task).toMatchObject({ due: "2026-11-08", status: "pendente", updated: "2026-09-25T15:10:00-03:00" });
+    const after = (await mem.read(PATH))!.content;
+    expect(after.slice(after.indexOf("\n---\n"))).toBe(before.slice(before.indexOf("\n---\n")));
+  });
+
+  it("troca prazo existente e é idempotente com o mesmo prazo", async () => {
+    const { repo, mem } = setup();
+    await repo.create({ title: "Estudar system design", eventEpochSeconds: EVENT, due: "2026-09-30" as never });
+    expect((await repo.setDue(ID, "2026-10-01" as never)).task.due).toBe("2026-10-01");
+    const written = (await mem.read(PATH))!.content;
+    const again = await repo.setDue(ID, "2026-10-01" as never);
+    expect(again.changed).toBe(false);
+    expect((await mem.read(PATH))!.content).toBe(written);
+  });
+
+  it("recusa data inválida, tarefa inexistente e tarefa que não está pendente", async () => {
+    const { repo } = setup();
+    await repo.create({ title: "Estudar system design", eventEpochSeconds: EVENT });
+    await expect(repo.setDue(ID, "2026-02-31" as never)).rejects.toBeInstanceOf(TaskValidationError);
+    await expect(repo.setDue("2026-09-25-nao-existe", "2026-11-08" as never)).rejects.toBeInstanceOf(TaskNotFound);
+    await repo.complete(ID);
+    await expect(repo.setDue(ID, "2026-11-08" as never)).rejects.toBeInstanceOf(TaskValidationError);
   });
 });
 

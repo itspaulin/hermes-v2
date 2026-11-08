@@ -1,5 +1,6 @@
 import type { Converse } from "../../../shared/ai/bedrock.js";
 import { createAiService, type AiService } from "../../../shared/ai/service.js";
+import type { ChatHistory } from "../../../shared/ai/history.js";
 import type { AiConfig, ConversationTurn } from "../../../shared/ai/types.js";
 import { localDate, localIso } from "../clock.js";
 import { appendToNoteInput, findNotesInput, moveNoteInput, saveNoteInput, type RenatoNotionActions, type TemaChoice } from "./actions.js";
@@ -105,6 +106,8 @@ export interface NotionAssistantDeps {
   ai: AiService<RenatoNotionActions>;
   temas: TemaRepository;
   notas: NotasRepository;
+  /** Memória curta da conversa (Neon). Ausente = cada mensagem é avaliada sozinha. */
+  history?: ChatHistory;
 }
 export type NotionAssistant = (turn: TurnInput) => Promise<string>;
 
@@ -115,8 +118,8 @@ const link = (n: { url: string | undefined }): string => (n.url ? `\n${n.url}` :
  * Mensagem -> resposta. O modelo só PEDE; aqui o código decide o tema, cria a nota e responde com o
  * resultado real. Falha do modelo nunca grava nada. Erros do Notion propagam (o webhook decide o retry).
  */
-export function createNotionAssistant({ ai, temas: temaRepo, notas }: NotionAssistantDeps): NotionAssistant {
-  return async ({ text, chatId, messageId, epochSeconds, history }) => {
+export function createNotionAssistant({ ai, temas: temaRepo, notas, history: store }: NotionAssistantDeps): NotionAssistant {
+  const respond = async ({ text, chatId, messageId, epochSeconds, history }: TurnInput): Promise<string> => {
     const when = new Date(epochSeconds * 1000);
     const createdAt = localIso(when);
     // Uma só leitura dos temas por mensagem: as notas recentes reaproveitam a lista.
@@ -193,6 +196,16 @@ export function createNotionAssistant({ ai, temas: temaRepo, notas }: NotionAssi
         return [`Movi "${nota.title}" para ${temaPath([...temas, tema], tema)}.`, ...(notice ? [notice] : [])].join("\n") + link(nota);
       }
     }
+  };
+
+  return async (turn) => {
+    const history = store ? await store.load(turn.chatId) : turn.history;
+    const reply = await respond({ ...turn, ...(history && { history }) });
+    // Guarda o que o usuário viu (o resultado real da ação). Falha do modelo não entra na conversa.
+    if (store && reply !== AI_UNAVAILABLE_TEXT && reply !== TOO_LONG_TEXT) {
+      await store.append(turn.chatId, [{ role: "user", text: turn.text }, { role: "assistant", text: reply }]);
+    }
+    return reply;
   };
 }
 

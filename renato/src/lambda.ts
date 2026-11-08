@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-lambda";
 import { loadConverse } from "../../shared/ai/bedrock.js";
 import { loadAiConfig } from "../../shared/ai/config.js";
+import { createNeonHistory, type ChatHistory } from "../../shared/ai/history.js";
 import { createTelegramHandler, type HttpResponse } from "./handler.js";
 import { createRenatoAi, createRenatoConversation, explicitCapture, HELP_TEXT, CAPTURE_COMMAND, type RenatoConversation } from "./conversation.js";
 import { parseTelegramUpdate } from "./telegram.js";
@@ -264,6 +265,19 @@ function createRepository(config: RuntimeConfig): NoteRepository {
   }, http);
 }
 
+/** Memória da conversa (Neon). Opcional: sem o parâmetro ou com falha ao lê-lo, o Renato conversa sem histórico. */
+async function loadHistory(ssm: SSMClient, maxMessages: number): Promise<ChatHistory | undefined> {
+  const param = process.env.NEON_DATABASE_URL_PARAM?.trim();
+  if (!param) return undefined;
+  try {
+    // Mensagens longas (notas inteiras) são cortadas a 600 caracteres: o contexto serve para esclarecer, não para repetir a nota.
+    return createNeonHistory(await readParameter(ssm, param), { table: "renato_chat_history", maxMessages, maxChars: 600 });
+  } catch (err) {
+    console.error(`[history] desligado: ${err instanceof Error ? err.message : "erro"}`);
+    return undefined;
+  }
+}
+
 async function buildProductionHandler() {
   const ssm = new SSMClient({});
   const config = await loadConfig(process.env, ssm);
@@ -286,9 +300,10 @@ async function buildProductionHandler() {
   const aiConfig = loadAiConfig(process.env);
   const bedrock = aiConfig ? await loadConverse(aiConfig, (name) => readParameter(ssm, name)) : undefined;
   const conversation = aiConfig && bedrock ? createRenatoConversation(createRenatoAi(aiConfig, bedrock)) : undefined;
+  const history = notionRepos && aiConfig && bedrock ? await loadHistory(ssm, aiConfig.maxHistoryMessages) : undefined;
   const notion = notionRepos && {
     capture: createVerbatimCapture(notionRepos),
-    ...(aiConfig && bedrock && { assistant: createNotionAssistant({ ai: createNotionAi(aiConfig, bedrock), ...notionRepos }) }),
+    ...(aiConfig && bedrock && { assistant: createNotionAssistant({ ai: createNotionAi(aiConfig, bedrock), ...notionRepos, ...(history && { history }) }) }),
   };
   return createRenatoWebhookHandler({
     ...(conversation && { conversation }),

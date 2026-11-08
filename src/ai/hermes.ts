@@ -2,7 +2,7 @@ import { createAiService, type AiService } from "../../shared/ai/service.js";
 import type { Converse } from "../../shared/ai/bedrock.js";
 import type { DecisionOf, InputValidator } from "../../shared/ai/decision.js";
 import type { AiConfig } from "../../shared/ai/types.js";
-import type { ChatHistory } from "./history.js";
+import type { ChatHistory } from "../../shared/ai/history.js";
 import type { MetaRepository } from "../domain/meta-repository.js";
 import type { TaskRepository } from "../domain/task-repository.js";
 import { TaskNotFound, TaskValidationError } from "../domain/task-repository.js";

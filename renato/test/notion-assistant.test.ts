@@ -229,3 +229,27 @@ describe("conversa, contexto e falhas", () => {
     expect(SYSTEM_PROMPT).toContain("Nunca escreva código Mermaid");
   });
 });
+
+describe("memória da conversa", () => {
+  it("envia o histórico ao modelo e grava a mensagem e o que o usuário viu; falha do modelo não entra", async () => {
+    const store: { role: "user" | "assistant"; text: string }[] = [
+      { role: "user", text: "anota isso" },
+      { role: "assistant", text: "Qual tema: 1) A ou 2) B?" },
+    ];
+    const history = { load: vi.fn(async () => [...store]), append: vi.fn(async (_c: number, turns: readonly { role: "user" | "assistant"; text: string }[]) => void store.push(...turns)) };
+    const converse = vi.fn(async () => ({ text: JSON.stringify(action("save_note", { titulo: "T", resumo: "r", tipo: "resumo", tema: { novo: "A" }, conteudo: content })) }));
+    const run = createNotionAssistant({ ai: createNotionAi(config, converse), temas, notas, history });
+    const reply = await run({ text: "1", chatId: 7, messageId: 900, epochSeconds: EPOCH });
+
+    const request = (converse.mock.calls[0] as unknown as [{ messages: { text: string }[] }])[0];
+    expect(request.messages.map((m) => m.text)).toEqual(["anota isso", "Qual tema: 1) A ou 2) B?", "1"]);
+    expect(history.load).toHaveBeenCalledWith(7);
+    expect(store.slice(-2)).toEqual([{ role: "user", text: "1" }, { role: "assistant", text: reply }]);
+    expect(reply).toContain("Anotei: T");
+
+    history.append.mockClear();
+    const bad = createNotionAssistant({ ai: createNotionAi(config, vi.fn(async () => ({ text: "bla" }))), temas, notas, history });
+    expect(await bad({ text: "x", chatId: 7, messageId: 901, epochSeconds: EPOCH })).toBe(AI_UNAVAILABLE_TEXT);
+    expect(history.append).not.toHaveBeenCalled();
+  });
+});

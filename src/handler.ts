@@ -9,7 +9,7 @@ import { NotionTaskRepository } from "./notion/task-repository.js";
 import { VaultTaskRepository } from "./domain/task-repository.js";
 import { loadConverse } from "../shared/ai/bedrock.js";
 import { loadAiConfig } from "../shared/ai/config.js";
-import { createNeonHistory, type ChatHistory } from "./ai/history.js";
+import { createNeonHistory, type ChatHistory } from "../shared/ai/history.js";
 import { createHermesAi, createHermesConversation } from "./ai/hermes.js";
 import { parseScheduledEvent, runScheduled, type ScheduleDeps } from "./schedule/run.js";
 import { createSsmReader } from "./ssm.js";
@@ -25,7 +25,7 @@ async function loadHistory(ssm: ReturnType<typeof createSsmReader>, maxMessages:
   const param = process.env.NEON_DATABASE_URL_PARAM;
   if (!param) return undefined;
   try {
-    return createNeonHistory(await ssm.get(param), undefined, maxMessages);
+    return createNeonHistory(await ssm.get(param), { table: "hermes_chat_history", maxMessages });
   } catch (err) {
     console.error(`[history] desligado: ${err instanceof Error ? err.message : "erro"}`);
     return undefined;

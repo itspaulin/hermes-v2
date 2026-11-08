@@ -257,6 +257,7 @@ Resources:
           AI_MAX_OUTPUT_TOKENS: !Ref RenatoAiMaxOutputTokens
           AI_TIMEOUT_MS: !Ref RenatoAiTimeoutMs
           NOTION_TOKEN_PARAM: !Ref NotionTokenParam
+          NEON_DATABASE_URL_PARAM: !Ref NeonDatabaseUrlParam
           NOTION_TEMAS_DB: !Ref NotionTemasDb
           NOTION_NOTAS_DB: !Ref NotionNotasDb
       Policies:
@@ -266,6 +267,7 @@ Resources:
               Action: ssm:GetParameter
               Resource:
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NotionTokenParam}"
+                - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NeonDatabaseUrlParam}"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${RenatoSsmPrefix}/bot-token"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${RenatoSsmPrefix}/webhook-secret"
                 - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${RenatoSsmPrefix}/allowed-chat-ids"

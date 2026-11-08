@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHermesAi, createHermesConversation, pendingContext, AI_UNAVAILABLE_TEXT, SYSTEM_PROMPT } from "../src/ai/hermes.js";
-import type { ChatHistory } from "../src/ai/history.js";
+import type { ChatHistory } from "../shared/ai/history.js";
 import type { ConversationTurn } from "../shared/ai/types.js";
 import { routeMessage } from "../src/telegram/router.js";
 import type { Converse } from "../shared/ai/bedrock.js";

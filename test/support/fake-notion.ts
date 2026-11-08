@@ -11,6 +11,9 @@ export interface FakePage {
   last_edited_time: string;
   properties: Record<string, any>;
   database: string;
+  url?: string;
+  /** Blocos do corpo da página (create com `children` e PATCH /blocks/:id/children). */
+  children?: any[];
 }
 
 export class FakeNotion implements NotionClient {
@@ -36,9 +39,19 @@ export class FakeNotion implements NotionClient {
         created_time: this.stamp(),
         last_edited_time: this.stamp(),
         properties: normalize(body.properties),
+        children: body.children ?? [],
       };
+      page.url = `https://www.notion.so/${page.id}`;
       this.pages.push(page);
       return out(page);
+    }
+    const blocks = /^\/v1\/blocks\/([^/]+)\/children$/.exec(path);
+    if (method === "PATCH" && blocks) {
+      const page = this.pages.find((p) => p.id === blocks[1]);
+      if (!page) throw Object.assign(new Error("not found"), { name: "NotionApiError" });
+      if (body.children.length > 100) throw new Error("mais de 100 blocos por requisição");
+      (page.children ??= []).push(...body.children);
+      return { results: [] };
     }
     const patch = /^\/v1\/pages\/([^/]+)$/.exec(path);
     if (method === "PATCH" && patch) {
@@ -64,7 +77,13 @@ export class FakeNotion implements NotionClient {
   }
 
   private query(db: string, body: any) {
+    if ((body.page_size ?? 100) > 100) throw new Error("page_size acima de 100");
     const all = this.pages.filter((p) => p.database === db && matches(p, body.filter));
+    const sort = body.sorts?.[0];
+    if (sort?.direction === "descending") {
+      const key = sort.timestamp === "last_edited_time" ? "last_edited_time" : "created_time";
+      all.sort((a, b) => (a[key] < b[key] ? 1 : a[key] > b[key] ? -1 : 0));
+    }
     const start = body.start_cursor ? Number(body.start_cursor) : 0;
     const slice = all.slice(start, start + (body.page_size ?? this.pageSize));
     const next = start + slice.length;
@@ -79,6 +98,7 @@ function normalize(props: Record<string, any>): Record<string, any> {
   const res: Record<string, any> = {};
   for (const [k, v] of Object.entries(props)) {
     if (v?.title) res[k] = { title: v.title.map((t: any) => ({ plain_text: t.text.content })) };
+    else if (v?.relation) res[k] = { relation: v.relation };
     else if (v?.rich_text) res[k] = { rich_text: v.rich_text.map((t: any) => ({ plain_text: t.text.content })) };
     else if (v && "date" in v) res[k] = { date: v.date === null ? null : { start: /T/.test(v.date.start) ? v.date.start.replace(/(:\d{2})(?=Z|[+-]\d{2}:\d{2}$)/, "$1.000") : v.date.start } };
     else res[k] = v;
@@ -89,13 +109,20 @@ function normalize(props: Record<string, any>): Record<string, any> {
 function matches(page: FakePage, filter: any): boolean {
   if (!filter) return true;
   if (filter.or) return filter.or.some((f: any) => matches(page, f));
+  if (filter.and) return filter.and.every((f: any) => matches(page, f));
   const prop = page.properties[filter.property];
+  if (filter.title) {
+    const value = (prop?.title ?? []).map((t: any) => t.plain_text).join("").toLowerCase();
+    return value.includes(String(filter.title.contains).toLowerCase());
+  }
+  if (filter.relation) return (prop?.relation ?? []).some((r: any) => r.id === filter.relation.contains);
   if (filter.select) {
     const name = prop?.select?.name;
     return "equals" in filter.select ? name === filter.select.equals : name === undefined;
   }
   if (filter.rich_text) {
     const value = (prop?.rich_text ?? []).map((t: any) => t.plain_text).join("");
+    if ("contains" in filter.rich_text) return value.toLowerCase().includes(String(filter.rich_text.contains).toLowerCase());
     return "equals" in filter.rich_text ? value === filter.rich_text.equals : value === "";
   }
   throw new Error(`filtro não suportado no fake: ${JSON.stringify(filter)}`);

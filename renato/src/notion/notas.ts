@@ -15,7 +15,7 @@ import {
   type NotionPage,
 } from "../../../shared/notion/props.js";
 import { MAX_BLOCKS_PER_REQUEST, type Block } from "./blocks.js";
-import type { TemaRepository } from "./temas.js";
+import type { Tema, TemaRepository } from "./temas.js";
 
 /** Nomes das propriedades do banco Notas (contrato com o Notion, docs/notion-contract.md). */
 const P = { name: "Nome", id: "ID", summary: "Resumo", tema: "Tema", tipo: "Tipo", origem: "Origem", estado: "Estado", created: "Criada" } as const;
@@ -122,22 +122,22 @@ export class NotasRepository {
     return { nota: await this.parsed(page), created: true };
   }
 
-  async find(id: string): Promise<Nota | null> {
+  async find(id: string, temas?: readonly Tema[]): Promise<Nota | null> {
     const hit = (await queryAll(this.client, this.databaseId, byIdProperty(id)))[0];
-    return hit ? this.parsed(hit) : null;
+    return hit ? this.parsed(hit, temas) : null;
   }
 
   /** As notas mais recentemente alteradas (para dar contexto ao modelo). */
-  async recent(limit: number): Promise<Nota[]> {
+  async recent(limit: number, temas?: readonly Tema[]): Promise<Nota[]> {
     const res = await this.client.request("POST", `/v1/databases/${this.databaseId}/query`, {
       page_size: Math.min(Math.max(limit, 1), 100),
       sorts: [{ timestamp: "last_edited_time", direction: "descending" }],
     });
-    return this.parseAll(res.results as NotionPage[]);
+    return this.parseAll(res.results as NotionPage[], temas);
   }
 
   /** Busca por trecho no título ou no resumo e/ou por temas (páginas do Notion; passe o tema e seus subtemas). */
-  async search(query: { text?: string; temaPageIds?: string[]; limit?: number }): Promise<Nota[]> {
+  async search(query: { text?: string; temaPageIds?: string[]; limit?: number; temas?: readonly Tema[] }): Promise<Nota[]> {
     const and: unknown[] = [];
     const t = query.text?.trim();
     if (t) and.push({ or: [{ property: P.name, title: { contains: t } }, { property: P.summary, rich_text: { contains: t } }] });
@@ -149,7 +149,7 @@ export class NotasRepository {
       sorts: [{ timestamp: "last_edited_time", direction: "descending" }],
       ...(and.length > 0 && { filter: { and } }),
     });
-    return this.parseAll(res.results as NotionPage[]);
+    return this.parseAll(res.results as NotionPage[], query.temas);
   }
 
   /** Acrescenta blocos ao fim da página (em lotes de 100). Não altera nada que já esteja nela. */
@@ -160,21 +160,21 @@ export class NotasRepository {
   }
 
   /** Move a nota para outro tema (só a relação muda). */
-  async setTema(id: string, temaPageId: string): Promise<Nota> {
+  async setTema(id: string, temaPageId: string, temas?: readonly Tema[]): Promise<Nota> {
     const nota = await this.find(id);
     if (!nota) throw new NotaNotFound(id);
     const page: NotionPage = await this.client.request("PATCH", `/v1/pages/${nota.pageId}`, { properties: { [P.tema]: relationProp([temaPageId]) } });
-    return this.parsed(page);
+    return this.parsed(page, temas);
   }
 
-  private async parsed(page: NotionPage): Promise<Nota> {
-    const [nota] = await this.parseAll([page]);
+  private async parsed(page: NotionPage, temas?: readonly Tema[]): Promise<Nota> {
+    const [nota] = await this.parseAll([page], temas);
     if (!nota) throw new Error(`Nota inválida no Notion (${page.id})`);
     return nota;
   }
 
-  private async parseAll(pages: NotionPage[]): Promise<Nota[]> {
-    const slugByPage = new Map((await this.temas.list()).map((t) => [t.pageId, t.id]));
+  private async parseAll(pages: NotionPage[], temas?: readonly Tema[]): Promise<Nota[]> {
+    const slugByPage = new Map((temas ?? (await this.temas.list())).map((t) => [t.pageId, t.id]));
     return pages.map((p) => parse(p, slugByPage)).filter((n): n is Nota => n !== null);
   }
 }

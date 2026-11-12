@@ -2,7 +2,7 @@ version = 0.1
 
 [default.deploy.parameters]
 stack_name = "hermes-v2"
-capabilities = ["CAPABILITY_IAM"]
+capabilities = ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"]
 resolve_s3 = true
 confirm_changeset = false
 fail_on_empty_changeset = false

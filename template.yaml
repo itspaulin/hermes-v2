@@ -140,9 +140,31 @@ Resources:
           AI_MAX_HISTORY_MESSAGES: !Ref AiMaxHistoryMessages
           AI_MAX_INPUT_CHARS: !Ref AiMaxInputChars
           AI_MAX_OUTPUT_TOKENS: !Ref AiMaxOutputTokens
+          # Lembretes criados pela conversa: um schedule por lembrete no grupo abaixo, invocando
+          # esta mesma Lambda pela role abaixo. O ARN da Lambda é montado em runtime com o nome dela
+          # (referenciar HermesFunction.Arn aqui criaria dependência circular com a role).
+          REMINDER_GROUP: !Ref ReminderScheduleGroup
+          REMINDER_ROLE_ARN: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AWS::StackName}-reminder-invoke"
+          REMINDER_TARGET_ARN_PREFIX: !Sub "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:"
       Policies:
         - Version: "2012-10-17"
           Statement:
+            - Effect: Allow
+              Action:
+                - scheduler:CreateSchedule
+                - scheduler:GetSchedule
+                - scheduler:DeleteSchedule
+              Resource: !Sub "arn:${AWS::Partition}:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/${ReminderScheduleGroup}/*"
+            # ListSchedules não aceita recurso específico; o código filtra pelo grupo.
+            - Effect: Allow
+              Action: scheduler:ListSchedules
+              Resource: "*"
+            - Effect: Allow
+              Action: iam:PassRole
+              Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AWS::StackName}-reminder-invoke"
+              Condition:
+                StringEquals:
+                  iam:PassedToService: scheduler.amazonaws.com
             - Effect: Allow
               Action: ssm:GetParameter
               Resource:
@@ -216,6 +238,36 @@ Resources:
             RetryPolicy:
               MaximumRetryAttempts: 2
               MaximumEventAgeInSeconds: 3600
+
+  # Grupo só dos lembretes criados pela conversa. Os schedules fixos (check-ins) ficam no default.
+  ReminderScheduleGroup:
+    Type: AWS::Scheduler::ScheduleGroup
+    Properties:
+      Name: !Sub "${AWS::StackName}-reminders"
+
+  # Role que o EventBridge Scheduler assume para invocar o Hermes nos lembretes.
+  ReminderInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-reminder-invoke"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: invoke-hermes
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt HermesFunction.Arn
 
   RenatoLogGroup:
     Type: AWS::Logs::LogGroup

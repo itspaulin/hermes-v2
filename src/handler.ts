@@ -11,7 +11,9 @@ import { loadConverse } from "../shared/ai/bedrock.js";
 import { loadAiConfig } from "../shared/ai/config.js";
 import { createNeonHistory, type ChatHistory } from "../shared/ai/history.js";
 import { createHermesAi, createHermesConversation } from "./ai/hermes.js";
+import { SchedulerClient } from "@aws-sdk/client-scheduler";
 import { parseScheduledEvent, runScheduled, type ScheduleDeps } from "./schedule/run.js";
+import { reminderConfigFromEnv, SchedulerReminderStore } from "./schedule/reminder-store.js";
 import { createSsmReader } from "./ssm.js";
 import { createTelegramClient } from "./telegram/client.js";
 import { loadTelegramConfig, telegramParamNamesFromEnv } from "./telegram/config.js";
@@ -68,16 +70,19 @@ async function build(): Promise<Route> {
     checkins: new CheckinRepository(store, systemClock),
     reviews: new ReviewRepository(store, systemClock),
   };
+  // Lembretes: só com o grupo/role do template no ambiente (local e testes ficam sem).
+  const reminderConfig = reminderConfigFromEnv(process.env);
+  const reminders = reminderConfig && new SchedulerReminderStore(new SchedulerClient({}), reminderConfig);
   // IA opcional: desligada (padrão) ou mal configurada, o bot segue só com os comandos.
   const aiConfig = loadAiConfig(process.env);
   const bedrock = aiConfig ? await loadConverse(aiConfig, (name) => ssm.get(name)) : undefined;
   const history = aiConfig && bedrock ? await loadHistory(ssm, aiConfig.maxHistoryMessages) : undefined;
   const converse = aiConfig && bedrock
-    ? createHermesConversation(createHermesAi(aiConfig, bedrock), { clock: systemClock, ...repos, ...(history && { history }) })
+    ? createHermesConversation(createHermesAi(aiConfig, bedrock), { clock: systemClock, ...repos, ...(reminders && { reminders }), ...(history && { history }) })
     : undefined;
   const scheduleDeps: ScheduleDeps = { clock: systemClock, client, chatIds: config.allowedChatIds, ...repos };
   return {
-    http: createHandler({ config, client, clock: systemClock, ...repos, ...(converse && { converse }) }),
+    http: createHandler({ config, client, clock: systemClock, ...repos, ...(reminders && { reminders }), ...(converse && { converse }) }),
     schedule: (ev) => runScheduled(ev, scheduleDeps),
   };
 }

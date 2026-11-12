@@ -1,4 +1,6 @@
 import type { Checkin } from "../domain/checkin.js";
+import type { Reminder } from "../domain/reminder.js";
+import type { Task } from "../domain/task.js";
 import { assess, compareDone, UPCOMING_DAYS, type DayContext, type WeekStats } from "../domain/stats.js";
 import { weekdayOf, type LocalDate, type Week } from "../time/index.js";
 
@@ -32,6 +34,24 @@ export function checkinMessage(c: DayContext, date: LocalDate): string {
     "Como está indo hoje? O que você já fez e o que pretende fazer até o fim do dia?",
     "Responda com /checkin <texto>.",
   ].join("\n");
+}
+
+// ---------- Lembretes ----------
+
+const MAX_REMINDER_TASKS = 10;
+
+/** Texto do lembrete e, se ligado a uma meta, as pendências dela que vencem hoje ou estão atrasadas. */
+export function reminderMessage(r: Reminder, due: readonly Task[], date: LocalDate): string {
+  const lines = [`⏰ ${r.text}`];
+  if (due.length > 0) {
+    const sorted = [...due].sort((a, b) => (a.due! < b.due! ? -1 : a.due! > b.due! ? 1 : 0));
+    lines.push("", `Pendências da meta ${r.meta} para hoje:`);
+    for (const t of sorted.slice(0, MAX_REMINDER_TASKS)) {
+      lines.push(`- ${t.title}${t.due! < date ? ` (atrasada, prazo ${br(t.due!)})` : ""}`);
+    }
+    if (sorted.length > MAX_REMINDER_TASKS) lines.push(`...e mais ${sorted.length - MAX_REMINDER_TASKS}`);
+  }
+  return lines.join("\n");
 }
 
 // ---------- Métricas (quinta) e revisão (sábado) ----------

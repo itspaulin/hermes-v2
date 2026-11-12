@@ -4,6 +4,7 @@ import type { ReviewRepository } from "../domain/review-repository.js";
 import { dayContext, weekStats } from "../domain/stats.js";
 import type { TaskRepository } from "../domain/task-repository.js";
 import { SCHEDULES, type ScheduleKind } from "../config.js";
+import { parseReminder, type Reminder } from "../domain/reminder.js";
 import type { TelegramClient } from "../telegram/client.js";
 import { addDays, currentWeek, isoWeekLabel, today, weekdayOf, weekOf, type Clock } from "../time/index.js";
 import {
@@ -12,16 +13,22 @@ import {
   metricsBody,
   metricsMessage,
   reviewBody,
+  reminderMessage,
   reviewMessage,
   type CheckinSummary,
 } from "./render.js";
 
-/** Evento do EventBridge Scheduler (Input estático definido no template.yaml). */
-export interface ScheduledEvent {
-  kind: ScheduleKind;
-  /** Só para teste manual: ignora o calendário de SCHEDULES. */
-  force?: boolean;
-}
+/**
+ * Evento do EventBridge Scheduler. Os fixos têm Input estático no template.yaml; os lembretes
+ * levam o lembrete inteiro no Input (criado pela conversa, ver schedule/reminder-store.ts).
+ */
+export type ScheduledEvent =
+  | {
+      kind: ScheduleKind;
+      /** Só para teste manual: ignora o calendário de SCHEDULES. */
+      force?: boolean;
+    }
+  | { kind: "reminder"; reminder: Reminder };
 
 export interface ScheduleDeps {
   clock: Clock;
@@ -39,6 +46,10 @@ const KINDS: readonly string[] = ["checkin", "metrics", "weekly_review"] satisfi
 export function parseScheduledEvent(event: unknown): ScheduledEvent | null {
   if (typeof event !== "object" || event === null) return null;
   const { kind, force } = event as { kind?: unknown; force?: unknown };
+  if (kind === "reminder") {
+    const reminder = parseReminder(event);
+    return reminder ? { kind, reminder } : null;
+  }
   if (typeof kind !== "string" || !KINDS.includes(kind)) return null;
   return { kind: kind as ScheduleKind, ...(force === true && { force: true }) };
 }
@@ -52,14 +63,25 @@ export async function runScheduled(ev: ScheduledEvent, deps: ScheduleDeps): Prom
   const { clock, tasks, metas, checkins, reviews } = deps;
   const date = today(clock);
 
+  const send = async (text: string): Promise<void> => {
+    for (const chat of deps.chatIds) await deps.client.sendMessage(chat, text);
+  };
+
+  // Lembrete: o próprio schedule é o calendário (dias e horário escolhidos pelo usuário).
+  // Sem nota no Vault: uma nova tentativa do Scheduler pode repetir a mensagem.
+  if (ev.kind === "reminder") {
+    const r = ev.reminder;
+    const due = r.meta === undefined
+      ? []
+      : (await tasks.listPending()).tasks.filter((t) => t.meta === r.meta && t.due !== undefined && t.due <= date);
+    await send(reminderMessage(r, due, date));
+    return `lembrete ${r.id} enviado`;
+  }
+
   // Calendário: só SCHEDULES manda. Domingo não tem entrada, logo nada automático acontece.
   if (!ev.force && !SCHEDULES.some((s) => s.kind === ev.kind && s.weekday === weekdayOf(date))) {
     return `ignorado: ${ev.kind} não está agendado para ${date}`;
   }
-
-  const send = async (text: string): Promise<void> => {
-    for (const chat of deps.chatIds) await deps.client.sendMessage(chat, text);
-  };
 
   switch (ev.kind) {
     case "checkin": {

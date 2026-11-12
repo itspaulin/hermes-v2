@@ -11,6 +11,8 @@ import { cmdHoje, cmdSemana } from "./list-commands.js";
 import { cmdResponderCheckin, cmdRevisao } from "./report-commands.js";
 import { cmdMeta, cmdMetas, cmdMudarStatusMeta } from "./meta-commands.js";
 import { cmdMudarStatus, cmdTarefa } from "./task-commands.js";
+import { cmdApagarLembrete, cmdLembretes } from "./reminder-commands.js";
+import type { ReminderStore } from "../domain/reminder.js";
 
 export interface RouterDeps {
   clock: Clock;
@@ -18,13 +20,15 @@ export interface RouterDeps {
   metas: MetaRepository;
   checkins: CheckinRepository;
   reviews: ReviewRepository;
+  /** Lembretes (EventBridge Scheduler). Ausente = desligados. */
+  reminders?: ReminderStore;
   /** Conversa natural para texto solto. Ausente = IA desligada: o texto solto recebe só a ajuda. */
   converse?: HermesConversation;
   /** Chat da mensagem, para a memória da conversa. */
   chatId?: number;
 }
 
-const COMMANDS_HELP = "Comandos: /tarefa, /feita, /cancelar, /hoje, /semana, /meta, /metas, /metafeita, /metacancelar, /checkin, /metrica, /revisao, /ping";
+const COMMANDS_HELP = "Comandos: /tarefa, /feita, /cancelar, /hoje, /semana, /meta, /metas, /metafeita, /metacancelar, /checkin, /metrica, /revisao, /lembretes, /apagarlembrete, /ping";
 const COMMAND_RE = /^\/([a-zA-Z0-9_]+)(?:@[a-zA-Z0-9_]+)?(?:\s+([\s\S]*))?$/;
 
 /** Comando e argumentos de um texto "/comando args", ou null se não começa com "/comando". */
@@ -45,14 +49,14 @@ export function parseCommand(text: string): string | null {
 export async function routeMessage(
   text: string,
   eventEpochSeconds: number | undefined,
-  { clock, tasks, metas, checkins, reviews, converse, chatId }: RouterDeps,
+  { clock, tasks, metas, checkins, reviews, reminders, converse, chatId }: RouterDeps,
   replyTo?: TelegramMessage,
   inBatch = false,
 ): Promise<RouteResult> {
   const lines = text.split("\n").map((l) => l.trim()).filter((l) => l !== "");
   if (!inBatch && lines.length > 1 && lines.every((l) => parseCommandLine(l) !== null)) {
     // Vários comandos colados na mesma mensagem: cada linha é um comando. Em lote não há pergunta de meta.
-    const deps = { clock, tasks, metas, checkins, reviews };
+    const deps = { clock, tasks, metas, checkins, reviews, ...(reminders && { reminders }) };
     const texts: string[] = [];
     for (const line of lines) texts.push(asReply(await routeMessage(line, eventEpochSeconds, deps, undefined, true)).text);
     return texts.join("\n\n");
@@ -74,6 +78,7 @@ export async function routeMessage(
         "Tarefas: /tarefa <título> [até AAAA-MM-DD], /feita, /cancelar, /hoje, /semana",
         "Metas: /meta <título> [até AAAA-MM-DD], /metas, /metafeita, /metacancelar",
         "Respostas: /checkin, /metrica, /revisao",
+        "Lembretes: peça na conversa (\"toda terça às 11h me lembra de...\"), /lembretes, /apagarlembrete",
         "Conexão: /ping",
       ].join("\n");
     case "ping":
@@ -98,6 +103,10 @@ export async function routeMessage(
       return cmdResponderCheckin("metrics", cmd.args, checkins, clock);
     case "revisao":
       return cmdRevisao(cmd.args, reviews, clock);
+    case "lembretes":
+      return cmdLembretes({ reminders });
+    case "apagarlembrete":
+      return cmdApagarLembrete(cmd.args, { reminders });
     case "hoje":
       return cmdHoje(tasks, metas, clock);
     case "semana":

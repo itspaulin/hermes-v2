@@ -71,6 +71,8 @@ Respostas do webhook: 401 secret errado, 400 payload inválido, 200 ignorado/res
 /checkin <texto>                     # responde ao check-in diário mais recente sem resposta
 /metrica <texto>                     # responde às métricas da quinta
 /revisao <texto>                     # responde à revisão semanal
+/lembretes                           # lista os lembretes (criar é pela conversa, ver "Lembretes")
+/apagarlembrete <id-ou-trecho>
 /start   /ping
 ```
 
@@ -86,6 +88,12 @@ Definida em `src/config.ts`; `template.yaml` tem um schedule por entrada (fuso `
 | dom | nada automático | |
 
 **A avaliação da semana é do Hermes, calculada por regra (sem IA), e você não precisa digitar nada.** Taxa = tarefas com prazo na semana (menos as canceladas) que foram concluídas; `produtiva` a partir de 80%, `razoável` a partir de 50%, senão `abaixo do planejado` (limites em `PRODUCTIVITY`, `src/config.ts`). Sem nenhuma tarefa com prazo na semana não há taxa, e o Hermes só conta o que foi concluído. A revisão e as métricas também comparam as concluídas com as da semana anterior. `/checkin`, `/metrica` e `/revisao` são **opcionais**: guardam uma nota sua no campo `answer` do frontmatter (o corpo é seu). Falha no Vault ou no Telegram repete até 2 vezes; como criar é idempotente, a repetição só reenvia a mensagem. Slot já respondido não é reenviado. Teste manual fora do calendário: invocar a Lambda com `{"kind":"checkin","force":true}`.
+
+### Lembretes
+
+Mensagens fixas em dias da semana e horário escolhidos por você, criadas pela conversa (precisa de `AiEnabled=true`): "toda segunda às 18h me lembra de revisar o inglês", "terça, quinta e sexta às 10h, 15 min de LinkedIn". O modelo transforma o pedido em dias (1 = segunda ... 7 = domingo), horário e texto; o código valida e responde com o que entendeu. Para ligar a uma meta ativa, diga qual ("ligado à meta inglês"): a mensagem passa a trazer as pendências dela que vencem hoje ou estão atrasadas. Domingo é permitido (o descanso vale para os check-ins). Lembrete é sempre semanal; algo de uma vez só vira tarefa com prazo.
+
+Cada lembrete é um schedule no grupo `<stack>-reminders` do EventBridge Scheduler (não há banco): o `Input` leva o lembrete inteiro (`{"kind":"reminder","id",...}`), que é o que a Lambda recebe e o que `/lembretes` lê. O Scheduler invoca a Lambda pela role `<stack>-reminder-invoke`; máximo de 20 lembretes. Sem nota no Vault: uma nova tentativa do Scheduler (falha no Telegram) pode repetir a mensagem.
 
 - O ID da meta é o slug do título (sem data): o mesmo título é a mesma meta. Uma tarefa com meta grava `meta: <id da meta>` no frontmatter e um wikilink `[[meta]]` no corpo.
 - **`/tarefa` sem `#meta` pergunta a meta** (se houver metas ativas): o Hermes responde com a lista numerada e um botão por opção, e a tarefa só é criada na resposta. Responda tocando no botão, ou respondendo (reply do Telegram) à pergunta com o número, `não` ou `nenhuma`. Uma mensagem solta `1` não tem contexto e é ignorada. Sem estado guardado: a pergunta carrega tudo (título, prazo, ID da tarefa e das metas), e a meta é revalidada (existe e está ativa) na hora de gravar. Perguntas valem por 24 h. Duas `/tarefa` seguidas geram duas perguntas independentes; nenhuma sobrescreve a outra.

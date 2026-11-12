@@ -80,6 +80,7 @@ describe("comandos", () => {
         "Tarefas: /tarefa <título> [até AAAA-MM-DD], /feita, /cancelar, /hoje, /semana",
         "Metas: /meta <título> [até AAAA-MM-DD], /metas, /metafeita, /metacancelar",
         "Respostas: /checkin, /metrica, /revisao",
+        "Lembretes: peça na conversa (\"toda terça às 11h me lembra de...\"), /lembretes, /apagarlembrete",
         "Conexão: /ping",
       ].join("\n"),
     ));
@@ -96,7 +97,7 @@ describe("comandos", () => {
 
   it("comando desconhecido", async () => {
     expect(await route("/foo")).toContain("Comando desconhecido: /foo");
-    expect(await route("/foo")).toContain("/tarefa, /feita, /cancelar, /hoje, /semana, /meta, /metas, /metafeita, /metacancelar, /checkin, /metrica, /revisao, /ping");
+    expect(await route("/foo")).toContain("/tarefa, /feita, /cancelar, /hoje, /semana, /meta, /metas, /metafeita, /metacancelar, /checkin, /metrica, /revisao, /lembretes, /apagarlembrete, /ping");
   });
 
   it("várias linhas /tarefa na mesma mensagem criam uma tarefa por linha, sem pergunta de meta", async () => {

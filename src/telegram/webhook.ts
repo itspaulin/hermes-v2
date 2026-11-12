@@ -13,6 +13,7 @@ import { answerByCallback, type CallbackOutcome } from "./meta-answer.js";
 import { asReply, type Reply } from "./reply.js";
 import type { HermesConversation } from "../ai/hermes.js";
 import { routeMessage } from "./router.js";
+import { ReminderApiError, ReminderUnavailable, type ReminderStore } from "../domain/reminder.js";
 import type { TelegramCallbackQuery, TelegramConfig, TelegramUpdate } from "./types.js";
 
 export interface WebhookDeps {
@@ -23,6 +24,7 @@ export interface WebhookDeps {
   metas: MetaRepository;
   checkins: CheckinRepository;
   reviews: ReviewRepository;
+  reminders?: ReminderStore;
   converse?: HermesConversation;
 }
 
@@ -63,7 +65,7 @@ function parseUpdate(event: APIGatewayProxyEventV2): TelegramUpdate | null {
  */
 export async function handleWebhook(
   event: APIGatewayProxyEventV2,
-  { config, client, clock, tasks, metas, checkins, reviews, converse }: WebhookDeps,
+  { config, client, clock, tasks, metas, checkins, reviews, reminders, converse }: WebhookDeps,
 ): Promise<APIGatewayProxyResultV2> {
   if (!secretMatches(event.headers?.[SECRET_HEADER], config.webhookSecret)) {
     return reply(401);
@@ -73,7 +75,7 @@ export async function handleWebhook(
   if (!update) return reply(400);
 
   const deps = { clock, tasks, metas, checkins, reviews };
-  const routeDeps = converse ? { ...deps, converse } : deps;
+  const routeDeps = { ...deps, ...(reminders && { reminders }), ...(converse && { converse }) };
   if (update.callback_query) return handleCallback(update.callback_query, config, client, deps);
 
   const message = update.message;
@@ -183,6 +185,15 @@ function describeError(err: unknown): { kind: "reply"; text: string } | { kind: 
     // Token/permissão/banco/propriedade: reenviar não adianta e prenderia a fila do Telegram.
     console.error(`[notion] ${err.message}`);
     return { kind: "reply", text: "Não consegui acessar o Notion (erro de configuração ou permissão). Veja os logs." };
+  }
+  if (err instanceof ReminderApiError) {
+    // Permissão/role/grupo do Scheduler: reenviar não adianta.
+    console.error(`[reminders] ${err.message}`);
+    return { kind: "reply", text: "Não consegui mexer nos lembretes (erro de configuração ou permissão). Veja os logs." };
+  }
+  if (err instanceof ReminderUnavailable) {
+    console.error(`[reminders] ${err.message}`);
+    return { kind: "retry" };
   }
   if (err instanceof NotionUnavailable) {
     console.error(`[notion] ${err.message}`);

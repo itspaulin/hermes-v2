@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SCHEDULES } from "../src/config.js";
+import { SCHEDULES, type ScheduleKind } from "../src/config.js";
 import { assess, compareDone, dayContext, weekStats, type WeekStats } from "../src/domain/stats.js";
 import { parseTask } from "../src/domain/task.js";
 import { parseScheduledEvent, runScheduled, type ScheduledEvent } from "../src/schedule/run.js";
@@ -30,7 +30,7 @@ function setup(startIso = "2026-09-21T17:00:00Z") {
       },
     },
   };
-  const run = (kind: ScheduledEvent["kind"], force = false) => runScheduled({ kind, ...(force && { force }) }, deps);
+  const run = (kind: ScheduleKind, force = false) => runScheduled({ kind, ...(force && { force }) }, deps);
   const say = (text: string) => routeMessage(text, epoch("2026-09-21T17:05:00Z"), { clock, ...repos });
   const task = (title: string, createdIso: string, due?: string, meta?: string) =>
     repos.tasks.create({ title, eventEpochSeconds: epoch(createdIso), ...(due && { due: D(due) }), ...(meta && { meta }) });
